@@ -402,12 +402,12 @@ var ExpenseParser = (function () {
   var CATEGORY_RULES = {
     expense: [
       [/\bchit|chitty|\bkuri\b|\bksfe\b/i, 'Chitty'],
-      [/credit card (?:bill|payment)|\bcc bill\b|card bill payment/i, 'Credit Card Bill'],
+      [/credit card (?:bill|payment)|\bcc bill\b|card bill payment|\bcred\b|cred club/i, 'Credit Card Bill'],
       [/swiggy|zomato|restaurant|hotel|cafe|café|bakery|biryani|kitchen|food|tea\b|juice/i, 'Food & Dining'],
-      [/supermarket|hypermarket|mart\b|bigbasket|blinkit|zepto|grocer|stores?\b|provision|vegetable|fish|meat|milma|dmart|reliance fresh/i, 'Groceries'],
+      [/supermarket|hypermarket|mart\b|bigbasket|blinkit|zepto|grocer|stores?\b|provision|vegetable|fish|meat|chicken|milma|dmart|reliance fresh/i, 'Groceries'],
       [/petrol|fuel|diesel|hpcl|bpcl|iocl|indian oil|bharat petroleum|hp pay|filling station/i, 'Fuel'],
-      [/uber|ola\b|rapido|irctc|ksrtc|metro|railway|redbus|makemytrip|airline|indigo|fastag|parking|toll/i, 'Travel'],
-      [/amazon|flipkart|myntra|ajio|meesho|nykaa|croma|lulu|decathlon/i, 'Shopping'],
+      [/uber|ola\b|rapido|irctc|ksrtc|metro|railway|redbus|makemytrip|airline|indigo|fastag|parking|\btoll\b(?![\s-]*free)/i, 'Travel'],
+      [/amazon|flipkart|myntra|ajio|meesho|nykaa|croma|lulu|decathlon|silks?\b|sarees?|textiles|tailor|footwear/i, 'Shopping'],
       [/electricity|kseb|water authority|airtel|jio|vodafone|\bvi\b|bsnl|recharge|broadband|dth|tata play|gas\b|lpg|bill\s*pay|billdesk/i, 'Bills & Utilities'],
       [/pharma|medical|hospital|clinic|apollo|lab\b|diagnostic|medplus|chemist|doctor/i, 'Health'],
       [/netflix|hotstar|prime video|spotify|bookmyshow|youtube|cinema|pvr|inox/i, 'Entertainment'],
@@ -593,7 +593,7 @@ var ExpenseParser = (function () {
       mode: mode,
       ref: findRef(text),
       balance: balance,
-      category: guessCategory(type, party + ' ' + text),
+      category: party && guessCategory(type, party) !== 'Others' ? guessCategory(type, party) : guessCategory(type, text),
       confidence: dateFound && party ? 'high' : 'low'
     };
   }

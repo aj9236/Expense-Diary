@@ -49,6 +49,10 @@ check('HDFC e-mail UPI', '\u2757 You have done a UPI txn. Check details!\n HDFC 
   { type: 'expense', amount: 200, date: '2026-11-02', party: 'JEEVASS CMI CENTRAL SCHOOL', account: '2507', ref: '630687109948', category: 'Education', description: 'UPI to JEEVASS CMI CENTRAL SCHOOL' });
 check('HDFC e-mail credit', 'View: Account update for your HDFC Bank A/c\n HDFC BANK <https://trkt.example.com/y> Dear Customer, Greetings from HDFC Bank! We\'re writing to inform you that Rs.5000.00 has been successfully credited to your HDFC Bank account ending in 2507. Transaction Details: a. Date: 31-10-26 b. Sender: SMITHA JOSE (VPA: *********tu-2@okicici) c. UPI Reference No.: 630451298334 Need Help?',
   { type: 'income', amount: 5000, date: '2026-10-31', party: 'SMITHA JOSE', ref: '630451298334', account: '2507', description: 'UPI from SMITHA JOSE' });
+check('Toll-free footer is not travel', 'Dear Customer, Rs.1250.00 is debited from your account ending 2507 towards VPA x@ybl (THAVAKKAL CHICKEN) on 31-10-26. UPI transaction reference no.: 630411112222. India (Toll-Free): 1800 258 6161',
+  { party: 'THAVAKKAL CHICKEN', category: 'Groceries' });
+check('CRED payment', 'Dear Customer, Rs.12422.30 is debited from your account ending 2507 towards VPA cred.club@axisb (CRED Club) on 01-11-26. UPI transaction reference no.: 630499998888. India (Toll-Free): 1800 258 6161',
+  { party: 'CRED Club', category: 'Credit Card Bill' });
 check('HDFC e-mail UPI no name', 'Dear Customer, Rs.1250.00 is debited from your account ending 2507 towards VPA ******5471@ybl on 31-10-26. UPI transaction reference no.: 630412345678.',
   { type: 'expense', amount: 1250, party: '5471@ybl', ref: '630412345678' });
 
