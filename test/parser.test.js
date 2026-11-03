@@ -56,6 +56,19 @@ check('CRED payment', 'Dear Customer, Rs.12422.30 is debited from your account e
 check('HDFC e-mail UPI no name', 'Dear Customer, Rs.1250.00 is debited from your account ending 2507 towards VPA ******5471@ybl on 31-10-26. UPI transaction reference no.: 630412345678.',
   { type: 'expense', amount: 1250, party: '5471@ybl', ref: '630412345678' });
 
+// Formats from IndusInd and BOBCARD (INR without Rs)
+check('IndusInd credit narration', 'Your IndusInd Account XXXXXXXX4591 has been credited for INR 10000 towards N/AXNFCN1522144467/UTIB0000004/ANGEL ONE LTD DSCNB. Call 18602677777 to report issue-IndusInd Bank',
+  { type: 'income', amount: 10000, party: 'ANGEL ONE LTD DSCNB', account: '4591', bank: 'IndusInd Bank', category: 'Investments', date: '2026-11-01' });
+check('BOBCARD UPI on credit card', 'Your txn of INR900.00 AT UPI-THEENATTIL ABOOBAC WAS SUCCESSFUL ON YOUR BOBCARD SCAPIA Credit Card ending with 5139.Not you? Go to Scapia support on the app or call 1800 2090.-BOBCARD',
+  { type: 'expense', amount: 900, party: 'THEENATTIL ABOOBAC', account: '5139', bank: 'BOBCARD', date: '2026-11-01' });
+check('Rupee symbol', 'You have spent \u20b9 1,250.50 on your Axis Bank Credit Card XX1122 at RELIANCE SMART on 02-11-2026.',
+  { type: 'expense', amount: 1250.5, party: 'RELIANCE SMART', bank: 'Axis Bank', date: '2026-11-02' });
+
+check('Card used at', 'Your SBI Credit Card ending 4455 was used for Rs.2,100.00 at DMART THRISSUR on 02/11/26. If not done by you, call 1860 180 1290.',
+  { type: 'expense', amount: 2100, party: 'DMART THRISSUR', category: 'Groceries' });
+check('Autopay', 'Autopay of INR 499.00 for NETFLIX deducted from your ICICI Bank Credit Card XX9087 on 02-Nov-26.',
+  { type: 'expense', amount: 499, party: 'NETFLIX', category: 'Entertainment' });
+
 // Messages that must be ignored
 check('OTP', 'OTP for transaction of Rs 1500.00 at AMAZON is 123456. Do not share. -HDFC Bank', null);
 check('Due reminder', 'Your credit card payment of Rs 4,500 is due on 05-11-26. Pay now.', null);

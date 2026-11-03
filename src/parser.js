@@ -15,12 +15,12 @@ var ExpenseParser = (function () {
     [/\bYes\s*Bank\b/i, 'Yes Bank'], [/\bIndusInd\b/i, 'IndusInd Bank'], [/\bBank of Baroda\b|\bBOB\b/i, 'Bank of Baroda'],
     [/\bPNB\b|\bPunjab National\b/i, 'PNB'], [/\bUnion Bank\b/i, 'Union Bank'], [/\bSouth Indian Bank\b|\bSIB\b/i, 'South Indian Bank'],
     [/\bESAF\b/i, 'ESAF Bank'], [/\bCSB\b/i, 'CSB Bank'], [/\bDhanlaxmi\b/i, 'Dhanlaxmi Bank'], [/\bIndian Bank\b/i, 'Indian Bank'],
-    [/\bBank of India\b/i, 'Bank of India'], [/\bAU Small\b/i, 'AU Bank'], [/\bPaytm Payments\b/i, 'Paytm Bank']
+    [/BOBCARD/i, 'BOBCARD'], [/\bScapia\b/i, 'Scapia'], [/\bOneCard\b/i, 'OneCard'], [/\bAmex\b|American Express/i, 'American Express'], [/\bRBL\b/i, 'RBL Bank'], [/\bFederal\b|\bFEDBNK\b/i, 'Federal Bank'], [/\bJupiter\b/i, 'Jupiter'], [/\bFi\b(?= Money| -)/, 'Fi'], [/\bBank of India\b/i, 'Bank of India'], [/\bAU Small\b/i, 'AU Bank'], [/\bPaytm Payments\b/i, 'Paytm Bank']
   ];
 
   var NOT_A_TRANSACTION = /\bOTP\b|one[\s-]time\s+password|verification code|\bis due\b|\bdue on\b|\bdue date\b|will be debited|to be debited|requested (?:money|rs|inr)|collect request|has requested|\bpre-?approved\b|\bapply now\b|\boffer\b.*\bT&C\b|\bdeclined\b|\bfailed\b|\bunsuccessful\b|\bnot been\b/i;
-  var CREDIT_WORDS = /\b(credited|credit alert|received|deposited|refunded|refund of|reversed|reversal|cashback)\b/ig;
-  var DEBIT_WORDS = /\b(debited|debit alert|sent|spent|paid|withdrawn|withdrawal|purchase|charged|transferred to|txn of)\b/ig;
+  var CREDIT_WORDS = /\b(credited|credit alert|credit of|received|deposited|refunded|refund of|reversed|reversal|cashback|added to your)\b/ig;
+  var DEBIT_WORDS = /\b(debited|debit alert|debit of|sent|spent|paid|withdrawn|withdrawal|purchase|charged|transferred to|txn of|transaction of|used at|used for|autopay|auto-debit|auto debit|deducted)\b/ig;
   var AMOUNT = /(?:^|[^a-z])(?:rs\.?|inr|₹)\s*:?\s*([\d,]+(?:\.\d+)?)/ig;
   var BALANCE = /(?:avl\.?\s*|available\s*|clr\.?\s*)?bal(?:ance)?\.?\s*(?:is|:|-|=)?\s*(?:rs\.?|inr|₹)\s*:?\s*([\d,]+(?:\.\d+)?)/i;
 
@@ -38,13 +38,13 @@ var ExpenseParser = (function () {
       [/netflix|hotstar|prime video|spotify|bookmyshow|youtube|cinema|pvr|inox/i, 'Entertainment'],
       [/\brent\b/i, 'Rent'], [/\bemi\b|loan|nach|\becs\b/i, 'EMI & Loans'],
       [/insurance|lic\b|premium/i, 'Insurance'], [/school|college|tuition|fees|course|udemy|byju/i, 'Education'],
-      [/zerodha|groww|upstox|dhan\b|mutual fund|\bsip\b|smallcase|kuvera|nps\b|ppf/i, 'Investments'],
+      [/zerodha|groww|upstox|dhan\b|angel one|mutual fund|\bsip\b|smallcase|kuvera|nps\b|ppf/i, 'Investments'],
       [/\batm\b|cash withdrawal/i, 'Cash Withdrawal']
     ],
     income: [
       [/salary|\bsal\b|payroll/i, 'Salary'], [/\bchit|chitty|\bkuri\b|\bksfe\b/i, 'Chitty'], [/interest|\bint\.?\s*pd\b/i, 'Interest'],
       [/refund|reversal|reversed|cashback/i, 'Refund & Cashback'], [/dividend/i, 'Dividend'],
-      [/zerodha|groww|upstox|dhan\b|redemption|mutual fund/i, 'Investments']
+      [/zerodha|groww|upstox|dhan\b|angel one|angel broking|redemption|mutual fund/i, 'Investments']
     ]
   };
 
@@ -96,11 +96,18 @@ var ExpenseParser = (function () {
     return pad(h) + ':' + m[2];
   }
 
-  var STOP = '(?=\\s+on\\s|\\s+On\\b|\\s+ON\\b|\\n|\\.\\s*Ref|\\s+Ref\\w*|\\s+If\\b|\\s+Avl\\b|\\s*\\(|\\.\\s+[A-Z]|\\.\\s*$|\\s+via\\b|\\s+using\\b|\\s+at\\s+\\d|\\s+for\\s|,|;|\\s*$)';
+  var STOP = '(?=\\s+on\\s|\\s+On\\b|\\s+ON\\b|\\n|\\.\\s*Ref|\\s+Ref\\w*|\\s+If\\b|\\s+Avl\\b|\\s*\\(|\\.\\s+[A-Z]|\\.\\s*$|\\s+via\\b|\\s+using\\b|\\s+at\\s+\\d|\\s+for\\s|\\s+was\\b|\\s+(?:deducted|debited|charged|credited)\\b|\\s+is\\s+successful|\\s+has\\b|\\.\\s*Not you|\\.\\s*Call|\\s+Call\\s+\\d|,|;|\\s*$)';
   function cleanParty(s) {
     if (!s) return '';
     s = s.replace(/\s+/g, ' ').replace(/^[\s:.\-]+|[\s:.\-]+$/g, '');
-    s = s.replace(/^(?:NEFT|IMPS|UPI|RTGS|NACH)\s+(?:from|to|by)?\s*/i, '');
+    s = s.replace(/^(?:NEFT|IMPS|UPI|RTGS|NACH)\s*[-:\s]\s*(?:from|to|by)?\s*/i, '');
+    if (s.indexOf('/') >= 0) {
+      // bank narrations such as "N/AXNFCN1522144467/UTIB0000004/ANGEL ONE LTD DSCNB"
+      var segs = s.split('/').map(function (x) { return x.trim(); }).filter(function (x) {
+        return /[a-z]{3}/i.test(x) && !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(x) && (x.match(/\d/g) || []).length < x.length / 3;
+      });
+      if (segs.length) s = segs.sort(function (a, b) { return (b.match(/\s/g) || []).length - (a.match(/\s/g) || []).length; })[0];
+    }
     if (/^(?:your\b|a\/c|ac\b|acct|account|card\b|\d+$|beneficiary$|ATM\b|POS\b|NEFT$|IMPS$|UPI$|RTGS$)/i.test(s)) return '';
     if (/\ba\/c\b|\baccount\b/i.test(s)) return '';
     if (/^(?:inform|check|report|view|use|be|the|you|your|us|know|call|help|date|ensure|avoid|this|our|a|an|reach|contact|block|whatsapp|mycards|greetings)\b/i.test(s)) return '';
@@ -116,7 +123,7 @@ var ExpenseParser = (function () {
       ? [new RegExp('\\b(?:Payee|Beneficiary|Merchant)\\s*(?:name)?\\s*:\\s*(.+?)' + STOP, 'i'),
          new RegExp('\\b(?:towards|to|at|for)\\b\\s*:?\\s*(?:VPA\\s*:?\\s*)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')]
       : [new RegExp('\\b(?:Sender|Remitter|Received from)\\s*(?:name)?\\s*:\\s*(.+?)' + STOP, 'i'),
-         new RegExp('\\b(?:from|by)\\b\\s*:?\\s*(?:VPA\\s*:?\\s*)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')];
+         new RegExp('\\b(?:from|by|towards)\\b\\s*:?\\s*(?:VPA\\s*:?\\s*)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')];
     // Card spends: "... on 28-Oct-26 on AMAZON PAY IN."
     if (type === 'expense') tries.push(/\bon\s+(?!\d)([A-Z][A-Z0-9 &*'._\-]{2,}?)(?=\.\s|\.$|\s+Avl|\s*$)/);
     for (var i = 0; i < tries.length; i++) {
