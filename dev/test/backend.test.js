@@ -1,0 +1,60 @@
+const { load } = require('./gas-mock');
+const CODE = __dirname + '/../dist/backend/Code.gs';
+let fail = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fail++; };
+
+// A version-1 sheet that already holds one confirmed and one pending row
+const V1H = ['id','date','time','type','amount','category','description','party','account','bank','mode','ref','balance','source','status','note','raw','created','updated'];
+const v1 = [V1H,
+  ['a1','2026-10-30','','income',85000,'Salary','NEFT from ACME','ACME','0090','Federal Bank','NEFT','','','sms','confirmed','','raw','x','x'],
+  ['a2','2026-10-24','13:10','expense',754,'Others','UPI to THAVAKKAL CH','THAVAKKAL CH','0090','Federal Bank','UPI','666327617212',4740.99,'sms','pending','','raw','x','x']];
+const g = load(CODE, { presetSheets: [['Entries', v1]] });
+g.ctx.setup();
+const T = g.props.TOKEN;
+const P = b => g.post(Object.assign({ token: T }, b));
+
+ok(g.post({ action: 'refresh', token: 'bad' }).ok === false, 'wrong access key rejected');
+let s = P({ action: 'refresh' });
+ok(s.entries.length === 1 && s.inbox.length === 1 && s.inbox[0].ref === '666327617212', 'version-1 pending row moved to the Inbox');
+
+const sms1 = 'Sent Rs.1500.00\nFrom HDFC Bank A/C *2507\nTo NEKESH N KAMATH\nOn 01/11/26\nRef 630572220070\nNot You?';
+const r1 = P({ action: 'ingest', text: sms1 });
+ok(r1.added === true && r1.entries === undefined, 'Shortcut SMS goes to Inbox with a short reply');
+ok(P({ action: 'ingest', text: sms1 }).duplicate === true, 'same SMS twice is held once');
+ok(P({ action: 'ingest', text: 'Debited Rs 754.00 from a/c X0090 on 24Oct26 13:10 via UPI to THAVAKKAL CH. Ref 666327617212.' }).duplicate === true, 'migrated item still blocks its duplicate');
+ok(P({ action: 'ingest', text: 'Your OTP is 123456 for Rs 500 -HDFC' }).skipped === true, 'OTP skipped');
+
+g.gmail.threads.push({ addLabel() {}, getMessages: () => [{ getId: () => 'm9', getSubject: () => 'Alert', getDate: () => new Date(2026, 9, 31),
+  getBody: () => '', getPlainBody: () => 'Rs.5000.00 credited to HDFC Bank A/c XX2507 on 31-10-26 from VPA *tu-2@okicici (UPI 630451298334)' }] });
+s = P({ action: 'refresh', scan: true, force: true });
+ok(s.scanned === true && s.inbox.length === 3, 'opening the app scans Gmail (inbox now ' + s.inbox.length + ')');
+ok(P({ action: 'refresh', scan: true }).scanned === false, 'repeat scans within a minute are skipped');
+
+const byRef = ref => s.inbox.find(x => x.ref === ref);
+const firstId = byRef('630572220070').id;
+s = P({ action: 'confirm', items: [{ id: byRef('630572220070').id, entry: { category: 'Family' } }, { id: byRef('630451298334').id }] });
+ok(s.added === 2 && s.inbox.length === 1 && s.entries.length === 3, 'two ticked items added to the diary');
+ok(s.entries.some(e => e.ref === '630572220070' && e.category === 'Family' && e.source === 'sms'), 'category chosen before confirming is kept');
+s = P({ action: 'confirm', items: [{ id: firstId }] });
+ok(s.entries.length === 3, 'confirming twice does not add twice');
+s = P({ action: 'ignore', ids: [s.inbox[0].id] });
+ok(s.inbox.length === 0 && s.entries.length === 3, 'ignored item leaves the list without a diary row');
+ok(P({ action: 'ingest', text: 'Debited Rs 754.00 from a/c X0090 on 24Oct26 via UPI to THAVAKKAL CH. Ref 666327617212.' }).duplicate === true, 'ignored message does not come back');
+
+s = P({ action: 'save', kind: 'entry', item: { date: '2026-11-03', type: 'expense', amount: 120, category: 'Food & Dining', description: 'Tea and snacks', mode: 'Cash' } });
+ok(s.entries.some(e => e.description === 'Tea and snacks' && e.source === 'manual'), 'manual cash entry saved');
+ok(P({ action: 'save', kind: 'entry', item: { date: '03-11-2026', type: 'expense', amount: 5 } }).ok === false, 'bad date rejected');
+
+s = P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Home loan', name: 'Home loan', party: 'Federal Bank', amount: '25,00,000', current: 1850000, rate: 8.6, installment: 24500, frequency: 'Monthly', nextDue: '2026-11-05' } });
+const loan = s.holdings[0];
+ok(loan && loan.amount === 2500000 && loan.status === 'active' && loan.nextDue === '2026-11-05', 'liability saved with numbers cleaned');
+s = P({ action: 'batch', ops: [
+  { action: 'save', kind: 'holding', item: Object.assign({}, loan, { nextDue: '2026-12-05' }) },
+  { action: 'save', kind: 'entry', item: { date: '2026-11-05', type: 'expense', amount: 24500, category: 'EMI & Loans', description: 'EMI - Home loan' } }] });
+ok(s.holdings[0].nextDue === '2026-12-05' && s.entries.some(e => e.amount === 24500), 'record payment: due date moved and diary row added together');
+ok(P({ action: 'save', kind: 'holding', item: { side: 'asset', type: 'Chitty' } }).ok === false, 'holding without a name rejected');
+s = P({ action: 'delete', kind: 'holding', id: loan.id });
+ok(s.holdings.length === 0, 'holding deleted');
+ok(g.sheets.Inbox && g.sheets.Holdings && g.sheets.Entries.rows[0].length === V1H.length, 'three sheets present, Entries layout unchanged');
+
+console.log(fail ? fail + ' FAILED' : '\nAll back-end checks passed');
+process.exit(fail ? 1 : 0);
