@@ -56,5 +56,14 @@ s = P({ action: 'delete', kind: 'holding', id: loan.id });
 ok(s.holdings.length === 0, 'holding deleted');
 ok(g.sheets.Inbox && g.sheets.Holdings && g.sheets.Entries.rows[0].length === V1H.length, 'three sheets present, Entries layout unchanged');
 
+// iPhone Shortcut variants: key and action in the address, message as form field / multipart / plain text
+const viaQuery = (contents, type) => JSON.parse(g.ctx.doPost({ parameter: { token: T, action: 'ingest', source: 'sms' }, postData: { contents, type } }));
+let q = viaQuery('Debited Rs 11.00 from a/c X0090 on 01Nov26 via UPI to TEA SHOP. Ref 900000000001.', 'text/plain');
+ok(q.ok && q.added === true, 'Shortcut plain-text body accepted');
+q = viaQuery('--b1\r\nContent-Disposition: form-data; name="text"\r\n\r\nDebited Rs 12.00 from a/c X0090 on 01Nov26 via UPI to JUICE SHOP. Ref 900000000002.\r\n--b1--\r\n', 'multipart/form-data');
+ok(q.ok && q.added === true, 'Shortcut multipart form accepted');
+q = JSON.parse(g.ctx.doPost({ parameter: { token: T, action: 'ingest', text: 'Debited Rs 13.00 from a/c X0090 on 01Nov26 via UPI to BAKERY. Ref 900000000003.' }, postData: { contents: 'text=Debited+Rs+13.00', type: 'application/x-www-form-urlencoded' } }));
+ok(q.ok && q.added === true, 'Shortcut url-encoded form accepted');
+
 console.log(fail ? fail + ' FAILED' : '\nAll back-end checks passed');
 process.exit(fail ? 1 : 0);

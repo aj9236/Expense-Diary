@@ -302,8 +302,15 @@ function doGet() {
 }
 
 function doPost(e) {
-  var body = {};
-  try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { body = {}; }
+  var body = {}, raw = (e && e.postData && e.postData.contents) || '';
+  try { body = JSON.parse(raw || '{}'); } catch (err) {
+    // iPhone Shortcuts may send a form or plain text instead of JSON
+    body = {};
+    var mp = /name="?text"?[^\r\n]*\r?\n(?:[^\r\n]+\r?\n)*\r?\n([\s\S]*?)\r?\n--/.exec(raw);
+    if (mp) body.text = mp[1];
+    else if (raw && !/^[\w%+.\-]+=[^\s]*(&|$)/.test(raw)) body.text = raw;
+  }
+  if (!body || typeof body !== 'object') body = {};
   if (e && e.parameter) Object.keys(e.parameter).forEach(function (k) { if (body[k] === undefined) body[k] = e.parameter[k]; });
 
   var token = PropertiesService.getScriptProperties().getProperty('TOKEN');
