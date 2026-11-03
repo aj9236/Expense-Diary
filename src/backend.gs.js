@@ -112,6 +112,7 @@ function handle_(b) {
     case 'save': save_(b.kind, b.item || {}); return withSnapshot_({});
     case 'delete': remove_(b.kind, b.id); return withSnapshot_({});
     case 'batch': (b.ops || []).forEach(runOp_); return withSnapshot_({});
+    case 'reparse': return withSnapshot_({ reparsed: reparseInbox_() });
     default: throw new Error('Unknown action.');
   }
 }
@@ -205,6 +206,23 @@ function confirm_(items) {
     }
   });
   return added;
+}
+
+/* Reads waiting Inbox items again with the current reader (after an improvement). */
+function reparseInbox() { Logger.log('Re-read ' + reparseInbox_() + ' waiting items.'); }
+function reparseInbox_() {
+  var tab = rows_('inbox'), n = 0, now = new Date().toISOString();
+  tab.rows.forEach(function (row) {
+    var m = row.obj;
+    if (m.status !== 'new' || !m.raw) return;
+    var p = ExpenseParser.parse(m.raw, new Date(m.date + 'T12:00:00'));
+    if (!p) return;
+    ['date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank', 'mode', 'ref'].forEach(function (k) { m[k] = p[k]; });
+    m.balance = p.balance === null ? '' : p.balance;
+    m.updated = now;
+    writeRow_(tab, row.r, m); n++;
+  });
+  return n;
 }
 
 function setInboxStatus_(ids, status) {

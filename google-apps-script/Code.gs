@@ -103,22 +103,30 @@ var ExpenseParser = (function () {
     s = s.replace(/^(?:NEFT|IMPS|UPI|RTGS|NACH)\s+(?:from|to|by)?\s*/i, '');
     if (/^(?:your\b|a\/c|ac\b|acct|account|card\b|\d+$|beneficiary$|ATM\b|POS\b|NEFT$|IMPS$|UPI$|RTGS$)/i.test(s)) return '';
     if (/\ba\/c\b|\baccount\b/i.test(s)) return '';
+    if (/^(?:inform|check|report|view|use|be|the|you|your|us|know|call|help|date|ensure|avoid|this|our|a|an|reach|contact|block|whatsapp|mycards|greetings)\b/i.test(s)) return '';
+    if (/\b(?:has been|have been|is debited|is credited|were|kindly)\b/i.test(s)) return '';
+    if (/^\d{1,2}:\d{2}/.test(s)) return '';
     return s.length > 60 ? s.slice(0, 60) : s;
   }
   function findParty(text, type) {
+    // "VPA abc@okhdfcbank (NAME)" - prefer the name shown in brackets
+    var named = /\bVPA\s*:?\s*[\w.*\-]+@[\w.\-]+\s*\(([^)]{2,60})\)/i.exec(text);
+    if (named) { var nm = cleanParty(named[1]); if (nm) return nm; }
     var tries = type === 'expense'
-      ? [new RegExp('\\b(?:to|towards|at|for)\\s*:?\\s*(?:VPA\\s+)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')]
-      : [new RegExp('\\b(?:from|by)\\s*:?\\s*(?:VPA\\s+)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')];
+      ? [new RegExp('\\b(?:Payee|Beneficiary|Merchant)\\s*(?:name)?\\s*:\\s*(.+?)' + STOP, 'i'),
+         new RegExp('\\b(?:towards|to|at|for)\\b\\s*:?\\s*(?:VPA\\s*:?\\s*)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')]
+      : [new RegExp('\\b(?:Sender|Remitter|Received from)\\s*(?:name)?\\s*:\\s*(.+?)' + STOP, 'i'),
+         new RegExp('\\b(?:from|by)\\b\\s*:?\\s*(?:VPA\\s*:?\\s*)?(.+?)' + STOP, 'i'), new RegExp('\\bInfo\\s*:?\\s*(.+?)' + STOP, 'i')];
     // Card spends: "... on 28-Oct-26 on AMAZON PAY IN."
     if (type === 'expense') tries.push(/\bon\s+(?!\d)([A-Z][A-Z0-9 &*'._\-]{2,}?)(?=\.\s|\.$|\s+Avl|\s*$)/);
     for (var i = 0; i < tries.length; i++) {
       var re = tries[i], src = text, guard = 0;
-      while (guard++ < 6) {
+      while (guard++ < 15) {
         var m = re.exec(src);
         if (!m) break;
         var c = cleanParty(m[1]);
         if (c && !/^(?:rs\.?|inr|₹)?\s*[\d,.]+$/i.test(c)) return c;
-        src = src.slice(m.index + m[0].length);
+        src = src.slice(m.index + 2);
       }
     }
     return '';
@@ -163,7 +171,9 @@ var ExpenseParser = (function () {
   function parse(raw, now) {
     if (!raw) return null;
     now = now || new Date();
-    var text = String(raw).replace(/\r/g, '').replace(/[ \t ]+/g, ' ').trim();
+    var text = String(raw).replace(/\r/g, '')
+      .replace(/<\s*https?:\/\/[^>]*>/gi, ' ').replace(/https?:\/\/\S+/gi, ' ')
+      .replace(/\*/g, ' ').replace(/[ \t\u00a0]+/g, ' ').trim();
     // Safety footers ("Never share your OTP/PIN") must not hide a real transaction
     var screened = text.replace(/(?:never|do not|don'?t|pls don'?t|please do not)\s+(?:ever\s+)?share[^.\n]*/gi, ' ');
     if (NOT_A_TRANSACTION.test(screened)) return null;
@@ -330,6 +340,7 @@ function handle_(b) {
     case 'save': save_(b.kind, b.item || {}); return withSnapshot_({});
     case 'delete': remove_(b.kind, b.id); return withSnapshot_({});
     case 'batch': (b.ops || []).forEach(runOp_); return withSnapshot_({});
+    case 'reparse': return withSnapshot_({ reparsed: reparseInbox_() });
     default: throw new Error('Unknown action.');
   }
 }
@@ -423,6 +434,23 @@ function confirm_(items) {
     }
   });
   return added;
+}
+
+/* Reads waiting Inbox items again with the current reader (after an improvement). */
+function reparseInbox() { Logger.log('Re-read ' + reparseInbox_() + ' waiting items.'); }
+function reparseInbox_() {
+  var tab = rows_('inbox'), n = 0, now = new Date().toISOString();
+  tab.rows.forEach(function (row) {
+    var m = row.obj;
+    if (m.status !== 'new' || !m.raw) return;
+    var p = ExpenseParser.parse(m.raw, new Date(m.date + 'T12:00:00'));
+    if (!p) return;
+    ['date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank', 'mode', 'ref'].forEach(function (k) { m[k] = p[k]; });
+    m.balance = p.balance === null ? '' : p.balance;
+    m.updated = now;
+    writeRow_(tab, row.r, m); n++;
+  });
+  return n;
 }
 
 function setInboxStatus_(ids, status) {

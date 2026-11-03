@@ -26,7 +26,7 @@ check('Federal UPI debit', 'Debited Rs 754.00 from a/c X0090 on 24Oct26 13:10 vi
   { type: 'expense', amount: 754, date: '2026-10-24', time: '13:10', party: 'THAVAKKAL CH', account: '0090', bank: 'Federal Bank', mode: 'UPI', ref: '666327617212', balance: 4740.99 });
 
 check('HDFC credit', 'Credit Alert!\nRs.5000.00 credited to HDFC Bank A/c XX2507 on 31-10-26 from VPA *tu-2@okicici (UPI 630451298334)',
-  { type: 'income', amount: 5000, date: '2026-10-31', party: '*tu-2@okicici', account: '2507', bank: 'HDFC Bank', mode: 'UPI', ref: '630451298334' });
+  { type: 'income', amount: 5000, date: '2026-10-31', party: 'tu-2@okicici', account: '2507', bank: 'HDFC Bank', mode: 'UPI', ref: '630451298334' });
 
 // Other common Indian formats, for robustness
 check('SBI UPI debit', 'Dear UPI user A/C X1234 debited by 250.0 on date 30Oct26 trf to SWIGGY Refno 430212345678. If not u? call 1800111109. -SBI', { type: 'expense', amount: 250, date: '2026-10-30', ref: '430212345678', party: 'SWIGGY', category: 'Food & Dining' });
@@ -41,6 +41,16 @@ check('ATM', 'Rs.2000.00 withdrawn at ATM from A/c XX2507 on 29/10/26 13:45. Avl
 
 check('Footer mentions OTP', 'Rs 320.00 debited from A/c XX0090 on 01-11-26 to MILMA BOOTH via UPI Ref 777123456789. Never share OTP/PIN with anyone. -Federal Bank',
   { type: 'expense', amount: 320, party: 'MILMA BOOTH', category: 'Groceries' });
+
+// HDFC e-mail formats seen in the owner's Gmail
+check('HDFC e-mail card', 'A payment was made using your Credit Card\n HDFC BANK <https://trkt.example.com/v1/r/abc%2Fdef> Dear Customer, Greetings from HDFC Bank. We would like to inform you that *Rs. 2399.00* has been debited from your HDFC Bank Credit Card ending *6647* towards *ANTHROPIC* CLAUDE SUB* on *03 Nov, 2026 at 15:02:03*. To check your available balance, outstanding amount, or view recent transactions, you may use: - *Mycards:*https://mycards.hdfc.bank.in',
+  { type: 'expense', amount: 2399, date: '2026-11-03', time: '15:02', party: 'ANTHROPIC CLAUDE SUB', mode: 'Card', bank: 'HDFC Bank', description: 'Card at ANTHROPIC CLAUDE SUB' });
+check('HDFC e-mail UPI', '\u2757 You have done a UPI txn. Check details!\n HDFC BANK <https://trkt.example.com/x> Dear Customer, Greetings from HDFC Bank! Rs.200.00 is debited from your account ending 2507 towards VPA ******************buzz@hdfcbank (JEEVASS CMI CENTRAL SCHOOL) on 02-11-26. UPI transaction reference no.: 630687109948. If you did not authorize this transaction, please report it immediately',
+  { type: 'expense', amount: 200, date: '2026-11-02', party: 'JEEVASS CMI CENTRAL SCHOOL', account: '2507', ref: '630687109948', category: 'Education', description: 'UPI to JEEVASS CMI CENTRAL SCHOOL' });
+check('HDFC e-mail credit', 'View: Account update for your HDFC Bank A/c\n HDFC BANK <https://trkt.example.com/y> Dear Customer, Greetings from HDFC Bank! We\'re writing to inform you that Rs.5000.00 has been successfully credited to your HDFC Bank account ending in 2507. Transaction Details: a. Date: 31-10-26 b. Sender: SMITHA JOSE (VPA: *********tu-2@okicici) c. UPI Reference No.: 630451298334 Need Help?',
+  { type: 'income', amount: 5000, date: '2026-10-31', party: 'SMITHA JOSE', ref: '630451298334', account: '2507', description: 'UPI from SMITHA JOSE' });
+check('HDFC e-mail UPI no name', 'Dear Customer, Rs.1250.00 is debited from your account ending 2507 towards VPA ******5471@ybl on 31-10-26. UPI transaction reference no.: 630412345678.',
+  { type: 'expense', amount: 1250, party: '5471@ybl', ref: '630412345678' });
 
 // Messages that must be ignored
 check('OTP', 'OTP for transaction of Rs 1500.00 at AMAZON is 123456. Do not share. -HDFC Bank', null);
