@@ -65,5 +65,15 @@ ok(q.ok && q.added === true, 'Shortcut multipart form accepted');
 q = JSON.parse(g.ctx.doPost({ parameter: { token: T, action: 'ingest', text: 'Debited Rs 13.00 from a/c X0090 on 01Nov26 via UPI to BAKERY. Ref 900000000003.' }, postData: { contents: 'text=Debited+Rs+13.00', type: 'application/x-www-form-urlencoded' } }));
 ok(q.ok && q.added === true, 'Shortcut url-encoded form accepted');
 
+// One-time connect page
+let page = g.ctx.doGet({ parameter: { connect: '' } }).html;
+ok(/expensediary:\/\/setup\?cfg=/.test(page) && page.indexOf(encodeURIComponent(T)) > 0, 'connect page offers the app link with the key');
+page = g.ctx.doGet({ parameter: { connect: '' } }).html;
+ok(/Already connected/.test(page) && page.indexOf(T) < 0, 'connect page shows the key only once');
+g.ctx.resetAccessKey();
+page = g.ctx.doGet({ parameter: { connect: '' } }).html;
+ok(page.indexOf(encodeURIComponent(g.props.TOKEN)) > 0 && g.props.TOKEN !== T, 'resetAccessKey issues a new key and allows connecting again');
+ok(typeof g.ctx.doGet({ parameter: {} }) === 'string', 'plain status check still works');
+
 console.log(fail ? fail + ' FAILED' : '\nAll back-end checks passed');
 process.exit(fail ? 1 : 0);

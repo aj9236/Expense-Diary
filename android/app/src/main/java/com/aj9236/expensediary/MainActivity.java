@@ -19,6 +19,8 @@ import android.webkit.WebViewClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.net.URLEncoder;
+
 /** Shows the Expense Diary page and gives it access to bank SMS on this phone. */
 public class MainActivity extends Activity {
     static final String HOST = "aj9236.github.io";
@@ -59,8 +61,38 @@ public class MainActivity extends Activity {
         });
         web.addJavascriptInterface(new Bridge(), "ExpenseAndroid");
 
-        if (savedInstanceState != null) web.restoreState(savedInstanceState);
+        String setupUrl = setupUrlFrom(getIntent());
+        if (setupUrl != null) web.loadUrl(setupUrl);
+        else if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START_URL);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String setupUrl = setupUrlFrom(intent);
+        if (setupUrl != null) web.loadUrl(setupUrl);
+    }
+
+    /** Handles expensediary://setup?cfg={"url":..,"token":..} from the service's connect page. */
+    private String setupUrlFrom(Intent intent) {
+        if (intent == null || intent.getData() == null) return null;
+        Uri d = intent.getData();
+        if (!"expensediary".equals(d.getScheme()) || !"setup".equals(d.getHost())) return null;
+        try {
+            String cfg = d.getQueryParameter("cfg");
+            JSONObject o = new JSONObject(cfg);
+            String url = o.getString("url"), token = o.getString("token");
+            if (!url.startsWith("https://script.google.com/") || token.isEmpty()) return null;
+            SmsStore.saveConfig(this, url, token);
+            JSONObject clean = new JSONObject();
+            clean.put("url", url);
+            clean.put("token", token);
+            return START_URL + "&connected=1#setup=" + URLEncoder.encode(clean.toString(), "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

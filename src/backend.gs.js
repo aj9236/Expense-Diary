@@ -16,7 +16,14 @@ var SPREADSHEET_ID = '';
 
 function ss_() {
   if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
-  return SpreadsheetApp.getActiveSpreadsheet();
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  // A copied standalone service keeps its own Sheet, created on first setup.
+  var props = PropertiesService.getScriptProperties(), id = props.getProperty('SHEET_ID');
+  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) { } }
+  var created = SpreadsheetApp.create('Expense Diary');
+  props.setProperty('SHEET_ID', created.getId());
+  return created;
 }
 
 var KINDS = {
@@ -51,11 +58,14 @@ function setup() {
   Logger.log('Setup complete. Sheets ready: Inbox, Entries, Holdings.');
   Logger.log('YOUR ACCESS KEY (keep it private): ' + props.getProperty('TOKEN'));
   Logger.log('Gmail search used: ' + props.getProperty('GMAIL_QUERY'));
+  Logger.log('Your Sheet: ' + ss_().getUrl());
+  Logger.log('Next: Deploy > New deployment > Web app, Who has access: Anyone. Then open the Web app URL with ?connect at the end.');
 }
 
 function resetAccessKey() {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('TOKEN', newKey_());
+  props.deleteProperty('CONNECT_SHOWN');
   Logger.log('NEW ACCESS KEY: ' + props.getProperty('TOKEN'));
 }
 
@@ -69,8 +79,42 @@ function scheduledScan() {
 }
 
 /* ---------- web endpoints ---------- */
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.connect !== undefined) return connectPage_();
   return json_({ ok: true, app: 'Expense Diary', version: 2, message: 'The service is running.' });
+}
+
+/* One-time page that hands this service's address and key to the app.
+   It is shown only once; run resetAccessKey to show it again with a new key. */
+function connectPage_() {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('TOKEN');
+  var body;
+  if (!token) {
+    body = '<h1>Almost there</h1><p>Please go back to Apps Script, choose <b>setup</b> and press <b>Run</b> first.</p>';
+  } else if (props.getProperty('CONNECT_SHOWN')) {
+    body = '<h1>Already connected</h1><p>For your safety this link is shown only once. To connect again, run <b>resetAccessKey</b> in Apps Script, then open this page again.</p>';
+  } else {
+    props.setProperty('CONNECT_SHOWN', String(Date.now()));
+    var url = ScriptApp.getService().getUrl().replace(/\/dev$/, '/exec');
+    var cfg = JSON.stringify({ url: url, token: token });
+    var appLink = 'expensediary://setup?cfg=' + encodeURIComponent(cfg);
+    var webLink = 'https://aj9236.github.io/Expense-Diary/#setup=' + encodeURIComponent(cfg);
+    body = '<h1>Your Expense Diary is ready</h1>' +
+      '<p>Tap the button to connect the app on this phone.</p>' +
+      '<p><a class="btn" href="' + appLink + '" target="_top">Connect the Android app</a></p>' +
+      '<p class="small">On an iPhone or a computer, use this link instead:</p>' +
+      '<p><a href="' + webLink + '" target="_top">Open Expense Diary in the browser</a></p>' +
+      '<p class="small">If the button does nothing, copy this setup link and paste it in the app under Settings, Web app URL:</p>' +
+      '<textarea readonly onclick="this.select()">' + webLink + '</textarea>' +
+      '<p class="small">Keep this link private; it works like a password for your records.</p>';
+  }
+  var html = '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<style>body{font-family:-apple-system,Roboto,sans-serif;background:#f5efe3;color:#2a2620;padding:24px;line-height:1.5}' +
+    'h1{font-family:Georgia,serif;font-size:24px}.btn{display:inline-block;background:#8c3b2b;color:#fffaf0;padding:14px 22px;border-radius:12px;text-decoration:none;font-weight:600}' +
+    '.small{font-size:14px;color:#6d6558}textarea{width:100%;height:110px;font-size:12px;border-radius:10px;border:1px solid #e6dccb;padding:8px}</style>' +
+    '</head><body>' + body + '</body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('Expense Diary').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 function doPost(e) {

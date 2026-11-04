@@ -770,12 +770,36 @@ var ExpenseParser = (function () {
 
   /* ---------- Android app: bank SMS on the phone ---------- */
   var AND = window.ExpenseAndroid || null;
+  var GUIDE_URL = 'https://aj9236.github.io/Expense-Diary/android-setup.html';
+  var autoSms = !!AND && /[?&]connected=1/.test(location.search);
+  function autoImport() {
+    autoSms = false;
+    var items = [];
+    try { items = JSON.parse(AND.readRecentSms(30) || '[]'); } catch (e) { items = []; }
+    if (!items.length) { toast('Connected. New bank SMS will appear here.'); return; }
+    var before = D.inbox.length;
+    ingestChunks(items).then(function () {
+      var n = D.inbox.length - before;
+      toast('Connected. ' + n + ' transaction' + (n === 1 ? '' : 's') + ' from the last 30 days to confirm');
+    }).catch(function (e) { toast(e.message); });
+  }
+  function afterConnect() {
+    if (!autoSms) return;
+    if (androidHasSms()) autoImport(); else { try { AND.requestSmsPermission(); } catch (e) {} }
+  }
   function syncAndroidConfig() { if (AND && remote()) { try { AND.saveConfig(cfg.url, cfg.token); } catch (e) {} } }
   function androidHasSms() { try { return !!(AND && AND.hasSmsPermission()); } catch (e) { return false; } }
   function renderAndroid() {
     var el = $('androidCard');
     if (!AND) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
+    if (!remote()) {
+      el.innerHTML = '<h3>Welcome. Let\u2019s set up your diary</h3>' +
+        '<p>Your records will be kept in your own Google account, which only you can see. Setting it up takes about ten minutes, once.</p>' +
+        '<div class="btns"><button class="btn primary" id="openGuide">Start setup</button></div>' +
+        '<p class="hint">When you finish, Google shows a button that brings you back here, already connected.</p>';
+      return;
+    }
     if (androidHasSms()) {
       el.innerHTML = '<h3>Bank SMS on this phone</h3><p>New bank SMS reach this page automatically. Only messages that show an amount in Rs, INR or \u20b9 are read; personal messages stay on the phone.</p>' +
         '<div class="btns"><button class="btn" id="readSms">Read bank SMS from the last 30 days</button></div>';
@@ -785,7 +809,11 @@ var ExpenseParser = (function () {
         '<p class="hint">If Android says this setting is restricted, tap Open app settings, then the \u22ee menu at the top right, choose Allow restricted settings, come back and tap Allow SMS reading again.</p>';
     }
   }
-  window.__onSmsPermission = function (ok) { renderAndroid(); toast(ok ? 'SMS reading allowed' : 'SMS reading was not allowed'); };
+  window.__onSmsPermission = function (ok) {
+    renderAndroid();
+    if (ok && autoSms) { autoImport(); return; }
+    toast(ok ? 'SMS reading allowed' : 'SMS reading was not allowed');
+  };
   function ingestChunks(items) {
     var ops = items.map(function (x) { return typeof x === 'string' ? { action: 'ingest', text: x, source: 'sms' } : { action: 'ingest', text: x.text, at: x.at, source: 'sms' }; });
     var p = Promise.resolve();
@@ -806,7 +834,7 @@ var ExpenseParser = (function () {
     lastRefresh = Date.now();
     ui.refreshing = true; setSync(syncLabel());
     call('refresh', { scan: true, force: !!force }).then(function (j) {
-      ui.refreshing = false; apply(j); flushAndroid();
+      ui.refreshing = false; apply(j); flushAndroid(); afterConnect();
       if (!ui.navigated && D.inbox.length && ui.tab !== 'confirm') go('confirm', true);
       if (loud) toast(D.inbox.length ? D.inbox.length + ' transaction' + (D.inbox.length > 1 ? 's' : '') + ' to confirm' : 'No new transactions');
     }).catch(function (e) {
@@ -1244,6 +1272,7 @@ var ExpenseParser = (function () {
     if (t.id === 'toggleClosed') { ui.showClosed = !ui.showClosed; renderAssets(); return; }
     if (t.id === 'firstHold') { openHolding(null); return; }
     if (t.id === 'allowSms') { try { AND.requestSmsPermission(); } catch (e) {} return; }
+    if (t.id === 'openGuide') { location.href = GUIDE_URL; return; }
     if (t.id === 'appSettings') { try { AND.openAppSettings(); } catch (e) {} return; }
     if (t.id === 'readSms') {
       if (!remote()) { toast('Connect your Google Sheet in Settings first.'); return; }
