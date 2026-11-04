@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Set up Expense Diary</title>
+<style>
+:root { --paper:#f5efe3; --page:#fffaf0; --ink:#2a2620; --ink-2:#6d6558; --rule:#e6dccb; --accent:#8c3b2b; --accent-ink:#fffaf0; }
+@media (prefers-color-scheme: dark) { :root { --paper:#1c1813; --page:#26211a; --ink:#f1e9da; --ink-2:#b9ae9b; --rule:#3a3329; --accent:#e09a7f; --accent-ink:#1c1813; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,Roboto,"Segoe UI",sans-serif; line-height:1.55; }
+main { max-width:640px; margin:0 auto; padding:24px 16px 48px; }
+h1 { font-family:Georgia,serif; font-size:26px; margin:0 0 6px; }
+.lead { color:var(--ink-2); margin:0 0 20px; }
+.step { background:var(--page); border-radius:14px; padding:14px 16px 12px 56px; margin:0 0 12px; position:relative; box-shadow:0 1px 2px rgba(60,40,20,.08),0 6px 20px rgba(60,40,20,.06); }
+.step b.n { position:absolute; left:14px; top:14px; width:30px; height:30px; border-radius:15px; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-family:Georgia,serif; }
+.step h2 { font-size:17px; margin:2px 0 6px; }
+.step p { margin:0 0 8px; }
+.btn { display:inline-block; background:var(--accent); color:var(--accent-ink); padding:12px 18px; border-radius:11px; text-decoration:none; font-weight:600; margin:4px 0 8px; }
+code { background:var(--paper); border:1px solid var(--rule); border-radius:6px; padding:1px 6px; font-size:14px; }
+.note { font-size:14px; color:var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Set up your Expense Diary</h1>
+  <p class="lead">Your records will be kept in your own Google account. Only you can see them. This takes about ten minutes, once. Use Chrome on this phone, signed in with your Google account.</p>
+
+  <div class="step"><b class="n">1</b>
+    <h2>Open the service and make your copy</h2>
+    <a class="btn" href="https://script.google.com/home/projects/1yIICWvcIU4iwv29RrPUJtFHKFsjPp_lW3qQ4TDwvC5Hm6orKeY-jXY5e" target="_blank" rel="noopener">Open in Chrome</a>
+    <p>If the page looks cramped or asks for a computer, tap Chrome's <b>&#8942;</b> menu and tick <b>Desktop site</b>.</p>
+    <p>Tap the <b>Make a copy</b> button (two overlapping pages, at the top right). Your own copy opens.</p>
+  </div>
+
+  <div class="step"><b class="n">2</b>
+    <h2>Run setup and allow access</h2>
+    <p>In your copy, make sure <code>setup</code> is chosen next to <b>Run</b>, then tap <b>Run</b>.</p>
+    <p>Tap <b>Review permissions</b> and choose your account. Google warns that the app isn't verified, because it is your own private copy: tap <b>Advanced</b>, then <b>Go to &hellip; (unsafe)</b>, tick <b>Select all</b> and tap <b>Continue</b>.</p>
+    <p class="note">Wait until the log shows "Execution completed". A Google Sheet named "Expense Diary" is created in your Drive.</p>
+  </div>
+
+  <div class="step"><b class="n">3</b>
+    <h2>Publish it for your phone</h2>
+    <p>Tap <b>Deploy</b>, then <b>New deployment</b>. Tap the gear next to "Select type" and choose <b>Web app</b>.</p>
+    <p>Set <b>Who has access</b> to <b>Anyone</b> and tap <b>Deploy</b>. If Google asks again, allow access as in step 2.</p>
+    <p>Copy the <b>Web app URL</b> that appears.</p>
+  </div>
+
+  <div class="step"><b class="n">4</b>
+    <h2>Connect the app</h2>
+    <p>Paste the address into Chrome's address bar, add <code>?connect</code> at the very end, and open it.</p>
+    <p>Tap <b>Connect the Android app</b> and choose <b>Expense Diary</b> if asked. The app opens, already connected.</p>
+  </div>
+
+  <div class="step"><b class="n">5</b>
+    <h2>Allow SMS reading</h2>
+    <p>The app asks to read SMS. Tap <b>Allow</b>. Your bank SMS from the last 30 days then appear on the Confirm page.</p>
+    <p class="note">If Android says the setting is restricted: open <b>Settings &rarr; Apps &rarr; Expense Diary</b>, tap the <b>&#8942;</b> menu at the top right, choose <b>Allow restricted settings</b>, then return to the app and tap <b>Allow SMS reading</b>.</p>
+  </div>
+
+  <p class="note">Only messages that show an amount in Rs, INR or &#8377; are read. Personal messages stay on the phone. Nothing is added to your diary until you tick it and tap Add.</p>
+</main>
+</body>
+</html>
