@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'com.aj9236.expensediary'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.aj9236.expensediary'
+        minSdk 26
+        targetSdk 34
+        versionCode runNumber
+        versionName "1.0.${runNumber}"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(System.getenv('EXPENSE_KEYSTORE') ?: 'missing.jks')
+            storePassword System.getenv('EXPENSE_KEYSTORE_PASSWORD') ?: ''
+            keyAlias 'expensediary'
+            keyPassword System.getenv('EXPENSE_KEYSTORE_PASSWORD') ?: ''
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

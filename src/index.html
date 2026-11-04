@@ -224,6 +224,7 @@ nav.tabs button.on { color: var(--accent); }
 
   <section id="tab-confirm">
     <div id="confirmList"></div>
+    <div class="card hidden" id="androidCard" style="margin-top:18px"></div>
     <div class="card" style="margin-top:18px">
       <h3>Paste a bank message</h3>
       <p>If an SMS was not picked up automatically, copy it from Messages and paste it here.</p>
@@ -269,7 +270,7 @@ nav.tabs button.on { color: var(--accent); }
       <p>Copies a private link that connects another device, such as your MacBook, in one step. Send it only to yourself, for example by AirDrop or Notes, because it contains your access key.</p>
       <div class="btns"><button class="btn" id="linkBtn">Copy setup link</button></div>
     </div>
-    <div class="card">
+    <div class="card" id="exportCard">
       <h3>Export</h3>
       <p>Download your data as CSV files that open in Excel or Numbers.</p>
       <div class="btns"><button class="btn" id="exportBtn">Income and expenses</button><button class="btn" id="exportHold">Assets and liabilities</button></div>
@@ -532,6 +533,37 @@ nav.tabs button.on { color: var(--accent); }
     return p.catch(function (e) { toast(e.message || String(e)); throw e; }).finally(function () { if (btn) btn.disabled = false; });
   }
 
+  /* ---------- Android app: bank SMS on the phone ---------- */
+  var AND = window.ExpenseAndroid || null;
+  function syncAndroidConfig() { if (AND && remote()) { try { AND.saveConfig(cfg.url, cfg.token); } catch (e) {} } }
+  function androidHasSms() { try { return !!(AND && AND.hasSmsPermission()); } catch (e) { return false; } }
+  function renderAndroid() {
+    var el = $('androidCard');
+    if (!AND) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    if (androidHasSms()) {
+      el.innerHTML = '<h3>Bank SMS on this phone</h3><p>New bank SMS reach this page automatically. Only messages that show an amount in Rs, INR or \u20b9 are read; personal messages stay on the phone.</p>' +
+        '<div class="btns"><button class="btn" id="readSms">Read bank SMS from the last 30 days</button></div>';
+    } else {
+      el.innerHTML = '<h3>Allow bank SMS reading</h3><p>Let the app read bank SMS so that debits and credits appear here by themselves. Only messages that show an amount in Rs, INR or \u20b9 are read; personal messages stay on the phone.</p>' +
+        '<div class="btns"><button class="btn primary" id="allowSms">Allow SMS reading</button><button class="btn" id="appSettings">Open app settings</button></div>' +
+        '<p class="hint">If Android says this setting is restricted, tap Open app settings, then the \u22ee menu at the top right, choose Allow restricted settings, come back and tap Allow SMS reading again.</p>';
+    }
+  }
+  window.__onSmsPermission = function (ok) { renderAndroid(); toast(ok ? 'SMS reading allowed' : 'SMS reading was not allowed'); };
+  function ingestChunks(items) {
+    var ops = items.map(function (x) { return typeof x === 'string' ? { action: 'ingest', text: x, source: 'sms' } : { action: 'ingest', text: x.text, at: x.at, source: 'sms' }; });
+    var p = Promise.resolve();
+    for (var i = 0; i < ops.length; i += 40) (function (chunk) { p = p.then(function () { return act('batch', { ops: chunk }); }); })(ops.slice(i, i + 40));
+    return p;
+  }
+  function flushAndroid() {
+    if (!AND || !remote()) return;
+    var list = [];
+    try { list = JSON.parse(AND.takePending() || '[]'); } catch (e) { list = []; }
+    if (list.length) ingestChunks(list).catch(function () {});
+  }
+
   var lastRefresh = 0;
   function refresh(force, loud) {
     if (ui.refreshing) return;
@@ -539,7 +571,7 @@ nav.tabs button.on { color: var(--accent); }
     lastRefresh = Date.now();
     ui.refreshing = true; setSync(syncLabel());
     call('refresh', { scan: true, force: !!force }).then(function (j) {
-      ui.refreshing = false; apply(j);
+      ui.refreshing = false; apply(j); flushAndroid();
       if (!ui.navigated && D.inbox.length && ui.tab !== 'confirm') go('confirm', true);
       if (loud) toast(D.inbox.length ? D.inbox.length + ' transaction' + (D.inbox.length > 1 ? 's' : '') + ' to confirm' : 'No new transactions');
     }).catch(function (e) {
@@ -791,7 +823,7 @@ nav.tabs button.on { color: var(--accent); }
     document.querySelectorAll('#tabs button').forEach(function (x) { x.classList.toggle('on', x.dataset.tab === ui.tab); });
     $('addBtn').classList.toggle('hidden', ui.tab === 'settings');
     $('addBtn').setAttribute('aria-label', ui.tab === 'assets' ? 'Add asset or liability' : 'Add income or expense');
-    if (ui.tab === 'confirm') renderConfirm();
+    if (ui.tab === 'confirm') { renderConfirm(); renderAndroid(); }
     if (ui.tab === 'diary') renderDiary();
     if (ui.tab === 'search') renderSearch();
     if (ui.tab === 'assets') renderAssets();
@@ -976,6 +1008,20 @@ nav.tabs button.on { color: var(--accent); }
     }
     if (t.id === 'toggleClosed') { ui.showClosed = !ui.showClosed; renderAssets(); return; }
     if (t.id === 'firstHold') { openHolding(null); return; }
+    if (t.id === 'allowSms') { try { AND.requestSmsPermission(); } catch (e) {} return; }
+    if (t.id === 'appSettings') { try { AND.openAppSettings(); } catch (e) {} return; }
+    if (t.id === 'readSms') {
+      if (!remote()) { toast('Connect your Google Sheet in Settings first.'); return; }
+      var items = [];
+      try { items = JSON.parse(AND.readRecentSms(30) || '[]'); } catch (e) { items = []; }
+      if (!items.length) { toast('No bank SMS found in the last 30 days.'); return; }
+      var before = D.inbox.length;
+      busy(t, ingestChunks(items)).then(function () {
+        var n = D.inbox.length - before;
+        toast(n > 0 ? n + ' new transaction' + (n > 1 ? 's' : '') + ' to confirm' : 'No new transactions; all are already recorded');
+      }).catch(function () {});
+      return;
+    }
   });
 
   $('pasteBtn').onclick = function () {
@@ -1059,11 +1105,15 @@ nav.tabs button.on { color: var(--accent); }
   $('cfgUrl').value = cfg.url; $('cfgToken').value = cfg.token;
   $('saveCfg').onclick = function () {
     var url = $('cfgUrl').value.trim(), token = $('cfgToken').value.trim(), prev = cfg, btn = this;
+    if (url.indexOf('#setup=') >= 0) {
+      try { var sc = JSON.parse(decodeURIComponent(url.slice(url.indexOf('#setup=') + 7))); url = sc.url || ''; token = sc.token || token; } catch (e) {}
+      $('cfgUrl').value = url; $('cfgToken').value = token;
+    }
     if (url && !/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { toast('The URL should start with https://script.google.com/'); return; }
     cfg = { url: url, token: token };
     if (!url) { store('ed.config', cfg); D = snapshot(localData()); render(); toast('Disconnected. Using this browser only.'); return; }
     busy(btn, call('refresh', { scan: true, force: true })).then(function (j) {
-      store('ed.config', cfg); apply(j); toast('Connected to your Google Sheet');
+      store('ed.config', cfg); syncAndroidConfig(); apply(j); flushAndroid(); toast('Connected to your Google Sheet');
     }).catch(function () { cfg = prev; });
   };
   $('uploadLocal').onclick = function () {
@@ -1103,6 +1153,8 @@ nav.tabs button.on { color: var(--accent); }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(false, false); });
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 
+  if (AND) $('exportCard').classList.add('hidden');
+  syncAndroidConfig();
   render();
   refresh(true, false);
   window.__ed = { ui: ui, data: function () { return D; } };

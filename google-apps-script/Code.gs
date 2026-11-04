@@ -341,7 +341,7 @@ function handle_(b) {
   switch (b.action) {
     case 'ping': return { version: 2 };
     case 'ingest': // used by the iPhone Shortcut; small reply unless the app asks for data
-      var r = ingest_(b.text, b.source || 'sms', null, null);
+      var r = ingest_(b.text, b.source || 'sms', b.at ? new Date(Number(b.at)) : null, null);
       return b.snapshot ? withSnapshot_(r) : r;
     case 'refresh':
       var info = {};
@@ -362,7 +362,7 @@ function handle_(b) {
 function runOp_(op) {
   if (op.action === 'save') save_(op.kind, op.item || {});
   else if (op.action === 'delete') remove_(op.kind, op.id);
-  else if (op.action === 'ingest') ingest_(op.text, op.source || 'sms', null, null);
+  else if (op.action === 'ingest') ingest_(op.text, op.source || 'sms', op.at ? new Date(Number(op.at)) : null, null);
   else if (op.action === 'confirm') confirm_(op.items || []);
   else if (op.action === 'ignore') setInboxStatus_(op.ids || [], 'ignored');
   else throw new Error('Unknown operation.');
