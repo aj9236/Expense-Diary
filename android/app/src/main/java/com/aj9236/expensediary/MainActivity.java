@@ -1,14 +1,12 @@
 package com.aj9236.expensediary;
 
-import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Telephony;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -16,16 +14,17 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.net.URLEncoder;
 
-/** Shows the Expense Diary page and gives it access to bank SMS on this phone. */
+/**
+ * Shows the Expense Diary page. The app asks for no sensitive permissions, so Android
+ * installs it normally; bank SMS reach the owner's Google service through MacroDroid.
+ */
 public class MainActivity extends Activity {
     static final String HOST = "aj9236.github.io";
     static final String START_URL = "https://aj9236.github.io/Expense-Diary/?app=android";
-    private static final int SMS_REQUEST = 41;
 
     private WebView web;
     private volatile boolean trustedPage = false;
@@ -75,26 +74,6 @@ public class MainActivity extends Activity {
         if (setupUrl != null) web.loadUrl(setupUrl);
     }
 
-    /** Handles expensediary://setup?cfg={"url":..,"token":..} from the service's connect page. */
-    private String setupUrlFrom(Intent intent) {
-        if (intent == null || intent.getData() == null) return null;
-        Uri d = intent.getData();
-        if (!"expensediary".equals(d.getScheme()) || !"setup".equals(d.getHost())) return null;
-        try {
-            String cfg = d.getQueryParameter("cfg");
-            JSONObject o = new JSONObject(cfg);
-            String url = o.getString("url"), token = o.getString("token");
-            if (!url.startsWith("https://script.google.com/") || token.isEmpty()) return null;
-            SmsStore.saveConfig(this, url, token);
-            JSONObject clean = new JSONObject();
-            clean.put("url", url);
-            clean.put("token", token);
-            return START_URL + "&connected=1#setup=" + URLEncoder.encode(clean.toString(), "UTF-8").replace("+", "%20");
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -106,18 +85,22 @@ public class MainActivity extends Activity {
         if (web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode != SMS_REQUEST) return;
-        final boolean ok = hasSms();
-        web.post(() -> web.evaluateJavascript(
-                "window.__onSmsPermission && window.__onSmsPermission(" + ok + ")", null));
-    }
-
-    private boolean hasSms() {
-        return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-                && checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
+    /** Handles expensediary://setup?cfg={"url":..,"token":..} from the service's connect page. */
+    private String setupUrlFrom(Intent intent) {
+        if (intent == null || intent.getData() == null) return null;
+        Uri d = intent.getData();
+        if (!"expensediary".equals(d.getScheme()) || !"setup".equals(d.getHost())) return null;
+        try {
+            JSONObject o = new JSONObject(d.getQueryParameter("cfg"));
+            String url = o.getString("url"), token = o.getString("token");
+            if (!url.startsWith("https://script.google.com/") || token.isEmpty()) return null;
+            JSONObject clean = new JSONObject();
+            clean.put("url", url);
+            clean.put("token", token);
+            return START_URL + "&connected=1#setup=" + URLEncoder.encode(clean.toString(), "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Methods the page can call. Each one refuses to work for any page other than the diary. */
@@ -129,62 +112,20 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void saveConfig(String url, String token) {
-            if (!trustedPage || url == null || token == null) return;
-            if (!url.startsWith("https://script.google.com/")) return;
-            SmsStore.saveConfig(MainActivity.this, url, token);
+        public boolean copyText(String text) {
+            if (!trustedPage || text == null) return false;
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null) return false;
+            cm.setPrimaryClip(ClipData.newPlainText("Expense Diary", text));
+            return true;
         }
 
         @JavascriptInterface
-        public boolean hasSmsPermission() {
-            return trustedPage && hasSms();
-        }
-
-        @JavascriptInterface
-        public void requestSmsPermission() {
-            if (!trustedPage) return;
-            runOnUiThread(() -> requestPermissions(
-                    new String[]{Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS}, SMS_REQUEST));
-        }
-
-        @JavascriptInterface
-        public void openAppSettings() {
-            if (!trustedPage) return;
-            Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.fromParts("package", getPackageName(), null));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(i);
-        }
-
-        /** Bank-style messages from the inbox in the last {@code days} days, newest first, as [{text, at}]. */
-        @JavascriptInterface
-        public String readRecentSms(int days) {
-            JSONArray out = new JSONArray();
-            if (!trustedPage || !hasSms()) return out.toString();
-            long since = System.currentTimeMillis() - Math.max(1, Math.min(days, 180)) * 86400000L;
-            try (Cursor c = getContentResolver().query(Telephony.Sms.Inbox.CONTENT_URI,
-                    new String[]{Telephony.Sms.BODY, Telephony.Sms.DATE},
-                    Telephony.Sms.DATE + " > ?", new String[]{String.valueOf(since)},
-                    Telephony.Sms.DATE + " DESC")) {
-                if (c != null) {
-                    while (c.moveToNext() && out.length() < 400) {
-                        String body = c.getString(0);
-                        if (!SmsStore.looksLikeBankMessage(body)) continue;
-                        JSONObject o = new JSONObject();
-                        o.put("text", body);
-                        o.put("at", c.getLong(1));
-                        out.put(o);
-                    }
-                }
-            } catch (Exception ignored) { }
-            return out.toString();
-        }
-
-        /** Messages that could not be sent earlier (for example without internet). */
-        @JavascriptInterface
-        public String takePending() {
-            if (!trustedPage) return "[]";
-            return SmsStore.takePending(MainActivity.this);
+        public void openUrl(String url) {
+            if (!trustedPage || url == null || !url.startsWith("https://")) return;
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception ignored) { }
+            });
         }
     }
 }

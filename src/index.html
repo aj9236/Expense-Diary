@@ -550,10 +550,18 @@ nav.tabs button.on { color: var(--accent); }
   }
   function afterConnect() {
     if (!autoSms) return;
+    if (!androidReadsSms()) {
+      autoSms = false;
+      toast('Connected. One last step: set up MacroDroid below.');
+      setTimeout(function () { var c = $('androidCard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 400);
+      return;
+    }
     if (androidHasSms()) autoImport(); else { try { AND.requestSmsPermission(); } catch (e) {} }
   }
   function syncAndroidConfig() { if (AND && remote()) { try { AND.saveConfig(cfg.url, cfg.token); } catch (e) {} } }
-  function androidHasSms() { try { return !!(AND && AND.hasSmsPermission()); } catch (e) { return false; } }
+  function androidHasSms() { try { return !!(AND && typeof AND.hasSmsPermission === 'function' && AND.hasSmsPermission()); } catch (e) { return false; } }
+  function androidReadsSms() { return !!(AND && typeof AND.hasSmsPermission === 'function'); }
+  function ingestAddress() { return cfg.url + (cfg.url.indexOf('?') >= 0 ? '&' : '?') + 'action=ingest&source=sms&token=' + encodeURIComponent(cfg.token); }
   function renderAndroid() {
     var el = $('androidCard');
     if (!AND) { el.classList.add('hidden'); return; }
@@ -563,6 +571,12 @@ nav.tabs button.on { color: var(--accent); }
         '<p>Your records will be kept in your own Google account, which only you can see. Setting it up takes about ten minutes, once.</p>' +
         '<div class="btns"><button class="btn primary" id="openGuide">Start setup</button></div>' +
         '<p class="hint">When you finish, Google shows a button that brings you back here, already connected.</p>';
+      return;
+    }
+    if (!androidReadsSms()) {
+      el.innerHTML = '<h3>Automatic bank SMS</h3><p>A free Play Store app, MacroDroid, passes each bank SMS to your diary. Set it up once: copy your address below, then follow the MacroDroid steps.</p>' +
+        '<div class="btns"><button class="btn primary" id="copyIngest">Copy address for MacroDroid</button><button class="btn" id="macroSteps">Show the steps</button></div>' +
+        '<p class="hint">Keep this address private; it includes your access key.</p>';
       return;
     }
     if (androidHasSms()) {
@@ -1038,6 +1052,14 @@ nav.tabs button.on { color: var(--accent); }
     if (t.id === 'firstHold') { openHolding(null); return; }
     if (t.id === 'allowSms') { try { AND.requestSmsPermission(); } catch (e) {} return; }
     if (t.id === 'openGuide') { location.href = GUIDE_URL; return; }
+    if (t.id === 'macroSteps') { location.href = GUIDE_URL + '#macrodroid'; return; }
+    if (t.id === 'copyIngest') {
+      var addr = ingestAddress(), copied = false;
+      try { copied = !!(AND && AND.copyText && AND.copyText(addr)); } catch (e) { copied = false; }
+      if (copied) toast('Address copied. Paste it in MacroDroid.');
+      else window.prompt('Copy this address:', addr);
+      return;
+    }
     if (t.id === 'appSettings') { try { AND.openAppSettings(); } catch (e) {} return; }
     if (t.id === 'readSms') {
       if (!remote()) { toast('Connect your Google Sheet in Settings first.'); return; }
