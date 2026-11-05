@@ -27,6 +27,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="expensediary" android:host="setup" />
             </intent-filter>
+            <intent-filter android:label="Add to Expense Diary">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
     </application>

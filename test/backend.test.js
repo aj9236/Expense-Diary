@@ -65,6 +65,8 @@ ok(q.ok && q.added === true, 'Shortcut multipart form accepted');
 q = JSON.parse(g.ctx.doPost({ parameter: { token: T, action: 'ingest', text: 'Debited Rs 13.00 from a/c X0090 on 01Nov26 via UPI to BAKERY. Ref 900000000003.' }, postData: { contents: 'text=Debited+Rs+13.00', type: 'application/x-www-form-urlencoded' } }));
 ok(q.ok && q.added === true, 'Shortcut url-encoded form accepted');
 
+ok(P({ action: 'refresh' }).sheetId === 'x', 'refresh tells the app which Sheet holds the data');
+
 // One-time connect page
 let page = g.ctx.doGet({ parameter: { connect: '' } }).html;
 ok(/expensediary:\/\/setup\?cfg=/.test(page) && page.indexOf(encodeURIComponent(T)) > 0, 'connect page offers the app link with the key');

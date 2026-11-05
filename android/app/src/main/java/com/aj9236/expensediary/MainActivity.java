@@ -87,7 +87,20 @@ public class MainActivity extends Activity {
 
     /** Handles expensediary://setup?cfg={"url":..,"token":..} from the service's connect page. */
     private String setupUrlFrom(Intent intent) {
-        if (intent == null || intent.getData() == null) return null;
+        if (intent == null) return null;
+        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+            // A bank SMS shared from the Messages app
+            CharSequence shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            if (shared == null || shared.length() == 0) return null;
+            String text = shared.toString();
+            if (text.length() > 2000) text = text.substring(0, 2000);
+            try {
+                return START_URL + "&shared=1#share=" + URLEncoder.encode(text, "UTF-8").replace("+", "%20");
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        if (intent.getData() == null) return null;
         Uri d = intent.getData();
         if (!"expensediary".equals(d.getScheme()) || !"setup".equals(d.getHost())) return null;
         try {

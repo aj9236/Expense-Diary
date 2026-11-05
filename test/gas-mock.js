@@ -34,7 +34,7 @@ function load(codePath, opts = {}) {
   const ctx = {
     console, Date, JSON, Math,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet(n)), getUrl: () => 'https://docs.google.com/spreadsheets/d/x' }) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet(n)), getUrl: () => 'https://docs.google.com/spreadsheets/d/x/edit', getId: () => 'x' }) },
     HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/ABC/exec' }), getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
     GmailApp: { getUserLabelByName: () => ({}), createLabel: () => ({}), search: () => gmail.threads.splice(0) },

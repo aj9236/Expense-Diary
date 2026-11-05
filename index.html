@@ -103,6 +103,8 @@ textarea.t { min-height: 96px; resize: vertical; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .btn.danger { color: var(--out); }
 .btn.block { width: 100%; }
+a.btn { text-decoration: none; color: var(--ink); text-align: center; line-height: 1.2; padding-top: 8px; padding-bottom: 8px; }
+a.btn.primary { color: var(--accent-ink); }
 .btn:disabled { opacity: .45; }
 .btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .btns .btn { flex: 1; }
@@ -264,6 +266,12 @@ nav.tabs button.on { color: var(--accent); }
       <input class="t" id="cfgToken" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="btns"><button class="btn primary" id="saveCfg">Save and connect</button><button class="btn" id="scanBtn">Check for new transactions</button></div>
       <div class="btns"><button class="btn block hidden" id="uploadLocal">Copy data kept in this browser to the Sheet</button></div>
+    </div>
+    <div class="card hidden" id="sheetCard">
+      <h3>Your Google Sheet</h3>
+      <p>All your records are kept in this Sheet in your own Google account. Open it to view everything, or download a copy to keep as a backup.</p>
+      <div class="btns"><a class="btn" id="sheetOpen" target="_blank" rel="noopener">Open my Google Sheet</a><a class="btn" id="sheetXlsx" target="_blank" rel="noopener">Download backup (Excel)</a></div>
+      <p class="hint">To undo a mistake, open the Sheet and choose File, then Version history, to bring back an earlier copy. To bring in records from a file, use File, then Import, in the Sheet and add them to the matching tab (Entries or Holdings) with the same columns.</p>
     </div>
     <div class="card">
       <h3>Use on another device</h3>
@@ -756,7 +764,7 @@ var ExpenseParser = (function () {
   }
   function apply(j) {
     if (j && j.entries) {
-      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [] };
+      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], sheetId: j.sheetId || D.sheetId || '', sheetUrl: j.sheetUrl || D.sheetUrl || '' };
       if (remote()) { store('ed2.remote', D); ui.lastSync = Date.now(); store('ed.lastSync', ui.lastSync); }
     }
     render();
@@ -787,7 +795,7 @@ var ExpenseParser = (function () {
     if (!autoSms) return;
     if (!androidReadsSms()) {
       autoSms = false;
-      toast('Connected. One last step: set up MacroDroid below.');
+      toast('Connected. To add a bank SMS, share it to Expense Diary from Messages.');
       setTimeout(function () { var c = $('androidCard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 400);
       return;
     }
@@ -809,9 +817,7 @@ var ExpenseParser = (function () {
       return;
     }
     if (!androidReadsSms()) {
-      el.innerHTML = '<h3>Automatic bank SMS</h3><p>A free Play Store app, MacroDroid, passes each bank SMS to your diary. Set it up once: copy your address below, then follow the MacroDroid steps.</p>' +
-        '<div class="btns"><button class="btn primary" id="copyIngest">Copy address for MacroDroid</button><button class="btn" id="macroSteps">Show the steps</button></div>' +
-        '<p class="hint">Keep this address private; it includes your access key.</p>';
+      el.innerHTML = '<h3>Add a bank SMS in two taps</h3><p>In your Messages app, press and hold a bank SMS, tap <b>Share</b> and choose <b>Expense Diary</b>. The transaction appears here, ready to confirm. You can also add cash entries with the + button.</p>';
       return;
     }
     if (androidHasSms()) {
@@ -1091,6 +1097,12 @@ var ExpenseParser = (function () {
   function render() {
     $('modeNote').classList.toggle('hidden', remote());
     $('uploadLocal').classList.toggle('hidden', !(remote() && hasLocalData()));
+    var hasSheet = remote() && !!D.sheetId;
+    $('sheetCard').classList.toggle('hidden', !hasSheet);
+    if (hasSheet) {
+      $('sheetOpen').href = D.sheetUrl || ('https://docs.google.com/spreadsheets/d/' + D.sheetId + '/edit');
+      $('sheetXlsx').href = 'https://docs.google.com/spreadsheets/d/' + D.sheetId + '/export?format=xlsx';
+    }
     setSync(syncLabel());
     var n = D.inbox.length, b = $('badge'); b.textContent = n; b.classList.toggle('hidden', !n);
     $('periodBar').classList.toggle('hidden', ui.tab !== 'diary');
@@ -1440,6 +1452,22 @@ var ExpenseParser = (function () {
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 
   if (AND) $('exportCard').classList.add('hidden');
+  (function handleShared() {
+    // The shared SMS travels after '#', which the browser never sends to any server.
+    var m = /^#share=(.*)$/.exec(location.hash);
+    if (!m) return;
+    var text = '';
+    try { text = decodeURIComponent(m[1]); } catch (e) { text = ''; }
+    try { history.replaceState(null, '', location.pathname + (AND ? '?app=android' : '')); } catch (e) {}
+    if (!text.trim()) return;
+    ui.tab = 'confirm'; ui.navigated = true;
+    var p = ExpenseParser.parse(text, new Date());
+    if (!p) { setTimeout(function () { toast('That message is not a completed debit or credit.'); }, 300); return; }
+    call('ingest', { text: text, source: 'sms', snapshot: true }).then(function (j) {
+      apply(j);
+      toast(j.duplicate ? 'This transaction is already recorded.' : (p.type === 'income' ? 'Credit ' : 'Debit ') + money(p.amount) + ' of ' + dmy(p.date) + ' is ready to confirm');
+    }).catch(function (e) { toast(e.message); });
+  })();
   syncAndroidConfig();
   render();
   refresh(true, false);

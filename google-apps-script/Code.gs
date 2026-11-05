@@ -417,6 +417,7 @@ function withSnapshot_(o) {
   o.inbox = readAll_('inbox').filter(function (x) { return x.status === 'new'; });
   o.holdings = readAll_('holding');
   o.lastScan = Number(PropertiesService.getScriptProperties().getProperty('LAST_SCAN') || 0);
+  try { var book = ss_(); o.sheetId = book.getId(); o.sheetUrl = book.getUrl(); } catch (e) { }
   return o;
 }
 

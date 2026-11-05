@@ -54,27 +54,15 @@ code { background:var(--paper); border:1px solid var(--rule); border-radius:6px;
     <p>Tap <b>Connect the Android app</b> and choose <b>Expense Diary</b> if asked. The app opens, already connected. If the button does nothing, copy the setup link shown on that page, open Expense Diary &rarr; Settings, paste it into <b>Web app URL</b> and tap <b>Save and connect</b>.</p>
   </div>
 
-  <div class="step" id="macrodroid"><b class="n">5</b>
-    <h2>Install MacroDroid</h2>
-    <p>Android only lets Play Store apps read SMS, so a free automation app passes your bank SMS to the diary.</p>
-    <a class="btn" href="https://play.google.com/store/apps/details?id=com.arlosoft.macrodroid" target="_blank" rel="noopener">Get MacroDroid</a>
-    <p>Then, in Expense Diary, tap <b>Copy address for MacroDroid</b> on the Confirm page.</p>
+  <div class="step" id="share"><b class="n">5</b>
+    <h2>Add bank SMS in two taps</h2>
+    <p>In your Messages app, press and hold a bank SMS, tap <b>Share</b> and choose <b>Expense Diary</b>. The transaction appears on the Confirm page; tick it and tap <b>Add to diary</b>.</p>
+    <p>Cash spends and receipts are added with the <b>+</b> button.</p>
   </div>
 
   <div class="step"><b class="n">6</b>
-    <h2>Create one macro</h2>
-    <p>In MacroDroid tap <b>Add Macro</b> and name it <code>Bank SMS to Expense Diary</code>.</p>
-    <p><b>Trigger:</b> tap <b>+</b> &rarr; <b>Call/SMS</b> &rarr; <b>SMS Received</b> &rarr; <b>Any Number</b>. For the content choose <b>Matches</b>, open the advanced options, tick <b>Enable Regex</b>, and enter:</p>
-    <p><code>(?is).*(rs\.?|inr|&#8377;)\s*:?\s*[0-9].*</code></p>
-    <p class="note">This sends only messages that show an amount. If this looks difficult, choose <b>Any Content</b> instead; your diary still keeps only bank transactions and discards the rest.</p>
-    <p><b>Action:</b> tap <b>+</b> &rarr; <b>Web Interactions</b> (or Connectivity) &rarr; <b>HTTP Request</b>. Set the method to <b>POST</b>, paste the copied address as the URL, and set the body (content) type to <b>text/plain</b> with the body <code>{sms_message}</code> (pick it from the magic text list).</p>
-    <p>Tap the tick to save, and allow the SMS permission when MacroDroid asks.</p>
-  </div>
-
-  <div class="step"><b class="n">7</b>
-    <h2>Keep it running and test</h2>
-    <p>If MacroDroid asks to ignore battery optimisation, allow it, so it works when the phone is idle.</p>
-    <p>Ask someone to send you: <code>Debited INR 1.00 from a/c X0090 on 04Nov26 via UPI to MACRODROID TEST. Ref 900000000097</code>. Within a few seconds it should appear on the Confirm page; tick it and tap Ignore.</p>
+    <h2>Your records and backup</h2>
+    <p>Everything is saved in the "Expense Diary" Google Sheet in your Google account. In the app, <b>Settings</b> has buttons to open the Sheet and to download an Excel backup.</p>
   </div>
 
   <p class="note">Nothing is added to your diary until you tick it and tap Add to diary. Your records stay in your own Google account.</p>
