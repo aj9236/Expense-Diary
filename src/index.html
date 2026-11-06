@@ -1270,7 +1270,13 @@ nav.tabs button.on { color: var(--accent); }
     csv(D.holdings, ['side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment', 'frequency', 'nextDue', 'start', 'end', 'status', 'notes'], 'assets-liabilities');
   };
 
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(false, false); });
+  // Pick up app updates: reload when the app comes back after a long break.
+  var hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 3 * 3600 * 1000 && !ui.modal) { location.reload(); return; }
+    refresh(false, false);
+  });
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 
   if (AND) $('exportCard').classList.add('hidden');

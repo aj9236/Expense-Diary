@@ -1,6 +1,6 @@
 // Keeps the app opening without a network connection. Page requests try the
 // network first so updates arrive; Google Sheet calls are never cached.
-var CACHE = 'expense-diary-v2';
+var CACHE = 'expense-diary-v3';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
@@ -10,7 +10,9 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then(function (r) {
+  // Always ask GitHub whether the page changed, so updates arrive on the next opening.
+  e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (r) {
+    if (!r.ok) return r;
     var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); return r;
   }).catch(function () { return caches.match(e.request).then(function (r) { return r || caches.match('index.html'); }); }));
 });
