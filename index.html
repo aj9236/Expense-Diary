@@ -55,10 +55,18 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0; le
 
 main { padding: 12px 16px 24px; max-width: 880px; margin: 0 auto; }
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--page); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 4px; margin-bottom: 16px; }
-.summary div { text-align: center; padding: 0 4px; min-width: 0; }
-.summary div + div { border-left: 1px solid var(--rule); }
+.summary > * { text-align: center; padding: 0 4px; min-width: 0; }
+.summary > * + * { border-left: 1px solid var(--rule); }
+.summary button { background: none; border-top: 0; border-right: 0; border-bottom: 0; font: inherit; color: inherit; cursor: pointer; padding: 4px; }
+.summary button:first-child { border-left: 0; }
+.summary button.on { background: var(--sel); border-radius: 10px; }
+.summary .tap { display: block; font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+.filterbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--sel); border-radius: 12px; padding: 8px 8px 8px 14px; margin: -4px 0 14px; font-size: 14px; }
+.filterbar .btn { min-height: 36px; padding: 0 12px; font-size: 14px; white-space: nowrap; flex: none; }
+.catrow { cursor: pointer; border-radius: 8px; }
+.catrow.on span:first-child { font-weight: 600; }
 .summary small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
-.summary b { display: block; font-family: var(--serif); font-size: 18px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.summary b { display: block; font-family: var(--serif); font-size: clamp(14px, 4.3vw, 18px); font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sumnote { font-size: 13px; color: var(--ink-2); margin: -8px 4px 16px; line-height: 1.5; }
 
 .day { background: var(--page); border-radius: 14px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; position: relative; }
@@ -685,7 +693,7 @@ var ExpenseParser = (function () {
   var ui = {
     tab: D.inbox.length ? 'confirm' : 'diary', view: 'month', y: new Date().getFullYear(), m: new Date().getMonth(),
     lastSync: load('ed.lastSync', null), refreshing: false, navigated: false,
-    sel: {}, edits: {}, searchType: '', showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
+    sel: {}, edits: {}, searchType: '', sumFilter: '', catFilter: '', showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
   };
 
   /* ---------- this-browser store, used until the Sheet is connected ---------- */
@@ -942,10 +950,38 @@ var ExpenseParser = (function () {
     list.forEach(function (e) { if (e.type === 'income') t.inc += Number(e.amount) || 0; else t.exp += Number(e.amount) || 0; });
     t.net = t.inc - t.exp; return t;
   }
-  function summaryHtml(t) {
-    return '<div class="summary"><div><small>Income</small><b class="in">' + money(t.inc) + '</b></div>' +
-      '<div><small>Spent</small><b class="out">' + money(t.exp) + '</b></div>' +
-      '<div><small>Balance</small><b class="' + (t.net < 0 ? 'out' : '') + '">' + (t.net < 0 ? '−' : '') + money(t.net) + '</b></div></div>';
+  function whole(n) { return money(Math.round(Number(n) || 0)); }
+  function summaryHtml(t, tappable) {
+    if (!tappable) {
+      return '<div class="summary"><div><small>Income</small><b class="in">' + whole(t.inc) + '</b></div>' +
+        '<div><small>Spent</small><b class="out">' + whole(t.exp) + '</b></div>' +
+        '<div><small>Balance</small><b class="' + (t.net < 0 ? 'out' : '') + '">' + (t.net < 0 ? '−' : '') + whole(t.net) + '</b></div></div>';
+    }
+    var f = ui.sumFilter;
+    return '<div class="summary">' +
+      '<button data-sum="income" class="' + (f === 'income' ? 'on' : '') + '"><small>Income</small><b class="in">' + whole(t.inc) + '</b><span class="tap">' + (f === 'income' ? 'showing' : 'tap to list') + '</span></button>' +
+      '<button data-sum="expense" class="' + (f === 'expense' ? 'on' : '') + '"><small>Spent</small><b class="out">' + whole(t.exp) + '</b><span class="tap">' + (f === 'expense' ? 'showing' : 'tap to list') + '</span></button>' +
+      '<button data-sum="all" class="' + (!f ? 'on' : '') + '"><small>Balance</small><b class="' + (t.net < 0 ? 'out' : '') + '">' + (t.net < 0 ? '−' : '') + whole(t.net) + '</b><span class="tap">' + (!f ? 'showing all' : 'show all') + '</span></button></div>';
+  }
+  function applyFilter(list) {
+    return list.filter(function (e) {
+      if (ui.sumFilter === 'income' && e.type !== 'income') return false;
+      if (ui.sumFilter === 'expense' && e.type === 'income') return false;
+      if (ui.catFilter && (e.category || 'Others') !== ui.catFilter) return false;
+      return true;
+    });
+  }
+  function filterBarHtml(shown, periodName) {
+    if (!ui.sumFilter && !ui.catFilter) return '';
+    var t = totals(shown), what = ui.catFilter ? esc(ui.catFilter) : (ui.sumFilter === 'income' ? 'Income' : 'Spent');
+    var sum = ui.sumFilter === 'income' ? '+' + whole(t.inc) : '−' + whole(t.exp);
+    return '<div class="filterbar" id="filterBar"><span><b>' + what + '</b> in ' + esc(periodName) + ' · ' + shown.length + ' entr' + (shown.length === 1 ? 'y' : 'ies') + ' · ' + sum + '</span>' +
+      '<button class="btn" id="clearFilter">Show all</button></div>';
+  }
+  function clearFilters() { ui.sumFilter = ''; ui.catFilter = ''; }
+  function showFiltered() {
+    var bar = $('filterBar');
+    if (bar) { var top = bar.getBoundingClientRect().top + window.scrollY - 140; window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' }); }
   }
   function entryHtml(e, showDate) {
     var inc = e.type === 'income';
@@ -970,8 +1006,8 @@ var ExpenseParser = (function () {
     list.forEach(function (e) { if (e.type !== 'income') { var c = e.category || 'Others'; by[c] = (by[c] || 0) + Number(e.amount); total += Number(e.amount); } });
     var keys = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; });
     if (!keys.length) return '';
-    return '<div class="cats"><h3>Where the money went</h3>' + keys.map(function (k) {
-      return '<div class="catrow"><span>' + esc(k) + '</span><span class="out">' + money(by[k]) + ' <span class="muted">' + Math.round(by[k] / total * 100) + '%</span></span><span class="track"><i style="width:' + (by[k] / total * 100) + '%"></i></span></div>';
+    return '<div class="cats"><h3>Where the money went <span class="muted" style="font-family:var(--sans);font-size:12px;font-weight:400">· tap a category to list it</span></h3>' + keys.map(function (k) {
+      return '<div class="catrow' + (ui.catFilter === k ? ' on' : '') + '" data-catf="' + esc(k) + '"><span>' + esc(k) + '</span><span class="out">' + money(by[k]) + ' <span class="muted">' + Math.round(by[k] / total * 100) + '%</span></span><span class="track"><i style="width:' + (by[k] / total * 100) + '%"></i></span></div>';
     }).join('') + '</div>';
   }
   function renderDiary() {
@@ -983,7 +1019,13 @@ var ExpenseParser = (function () {
         var key = ui.y + '-' + pad(i + 1), t = totals(yl.filter(function (e) { return e.date.slice(0, 7) === key; }));
         months.push(t); max = Math.max(max, t.inc, t.exp);
       }
-      el.innerHTML = summaryHtml(totals(yl)) + '<div class="year-grid">' + months.map(function (t, i) {
+      if (ui.sumFilter || ui.catFilter) {
+        var ys = applyFilter(yl);
+        el.innerHTML = summaryHtml(totals(yl), true) + filterBarHtml(ys, String(ui.y)) +
+          (ys.length ? dayGroupsHtml(ys) : '<div class="empty">Nothing to show.</div>') + categoryHtml(yl);
+        return;
+      }
+      el.innerHTML = summaryHtml(totals(yl), true) + '<div class="year-grid">' + months.map(function (t, i) {
         return '<button class="mrow" data-month="' + i + '"><span class="mn">' + MONTHS[i].slice(0, 3) + '</span>' +
           '<span class="bars"><span class="bar i" style="width:' + (t.inc / max * 100) + '%"></span><span class="bar o" style="width:' + (t.exp / max * 100) + '%"></span></span>' +
           '<span class="nums"><span class="in">' + (t.inc ? '+' + money(t.inc) : '–') + '</span><br><span class="out">' + (t.exp ? '−' + money(t.exp) : '–') + '</span></span></button>';
@@ -992,7 +1034,8 @@ var ExpenseParser = (function () {
     }
     var key2 = ui.y + '-' + pad(ui.m + 1);
     var list = D.entries.filter(function (e) { return String(e.date).slice(0, 7) === key2; });
-    el.innerHTML = summaryHtml(totals(list)) + (list.length ? dayGroupsHtml(list) + categoryHtml(list)
+    var shown = applyFilter(list);
+    el.innerHTML = summaryHtml(totals(list), true) + filterBarHtml(shown, MONTHS[ui.m] + ' ' + ui.y) + (list.length ? (shown.length ? dayGroupsHtml(shown) : '<div class="empty">Nothing to show.</div>') + categoryHtml(list)
       : '<div class="empty">No entries in ' + MONTHS[ui.m] + ' ' + ui.y + '.<small>Confirm transactions from the Confirm page, or tap + to add a cash entry.</small></div>');
   }
 
@@ -1249,18 +1292,19 @@ var ExpenseParser = (function () {
   $('tabs').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) go(b.dataset.tab); });
   $('viewSeg').addEventListener('click', function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
-    ui.view = b.dataset.v;
+    ui.view = b.dataset.v; clearFilters();
     document.querySelectorAll('#viewSeg button').forEach(function (x) { x.classList.toggle('on', x === b); });
     render();
   });
   function shift(d) {
+    clearFilters();
     if (ui.view === 'year') ui.y += d;
     else { ui.m += d; if (ui.m < 0) { ui.m = 11; ui.y--; } if (ui.m > 11) { ui.m = 0; ui.y++; } }
     render();
   }
   $('prevBtn').onclick = function () { shift(-1); };
   $('nextBtn').onclick = function () { shift(1); };
-  $('periodLabel').onclick = function () { var n = new Date(); ui.y = n.getFullYear(); ui.m = n.getMonth(); render(); };
+  $('periodLabel').onclick = function () { var n = new Date(); ui.y = n.getFullYear(); ui.m = n.getMonth(); clearFilters(); render(); };
   $('syncBtn').onclick = function () { refresh(true, true); };
   $('scanBtn').onclick = function () { if (!remote()) { toast('Connect your Google Sheet first.'); return; } refresh(true, true); };
 
@@ -1274,7 +1318,20 @@ var ExpenseParser = (function () {
   mainEl.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-open]'))) { var it = D.inbox.find(function (i) { return i.id === x.dataset.open; }); if (it) openEntry(it, 'inbox'); return; }
+    if ((x = t.closest('[data-sum]'))) {
+      var want = x.dataset.sum === 'all' ? '' : x.dataset.sum;
+      ui.catFilter = '';
+      ui.sumFilter = ui.sumFilter === want ? '' : want;
+      renderDiary(); showFiltered(); return;
+    }
+    if ((x = t.closest('[data-catf]'))) {
+      var c = x.dataset.catf;
+      if (ui.catFilter === c) clearFilters(); else { ui.catFilter = c; ui.sumFilter = 'expense'; }
+      renderDiary(); showFiltered(); return;
+    }
+    if (t.id === 'clearFilter') { clearFilters(); renderDiary(); return; }
     if ((x = t.closest('[data-month]'))) {
+      clearFilters();
       ui.m = +x.dataset.month; ui.view = 'month';
       document.querySelectorAll('#viewSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === 'month'); });
       render(); window.scrollTo(0, 0); return;
