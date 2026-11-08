@@ -145,11 +145,15 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); m
 .sect { margin: 18px 0 8px; display: flex; align-items: baseline; justify-content: space-between; }
 .sect h2 { margin: 0; font-size: 18px; }
 .sect span { font-size: 14px; font-variant-numeric: tabular-nums; }
-.hold-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.hold-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.hold-grid > * { min-width: 0; }
 .hold { display: flex; flex-direction: column; justify-content: flex-start; width: 100%; text-align: left; background: var(--page); border: 0; border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; }
 .hold .h1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.hold .nm { font-size: 16px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hold .val { font-family: var(--serif); font-size: 19px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hold .nm { font-size: 16px; font-weight: 500; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.hold .h1 .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hold .vl { flex: none; }
+.hold .ln { overflow-wrap: anywhere; }
+.hold .val { font-family: var(--serif); font-size: 19px; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
 .hold .vl { font-size: 11px; color: var(--ink-3); text-align: right; margin-top: -2px; }
 .hold .ln { font-size: 13px; color: var(--ink-2); margin-top: 4px; line-height: 1.45; }
 .hold.closed { opacity: .55; }
@@ -221,7 +225,7 @@ nav.tabs button.on { color: var(--accent); }
   nav.tabs button.on { background: var(--page); box-shadow: var(--shadow); }
   .badge { position: static; margin-left: auto; }
   .fab { bottom: 30px; right: 34px; }
-  .hold-grid { grid-template-columns: 1fr 1fr; }
+  .hold-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .sheet { left: 50%; right: auto; top: 50%; bottom: auto; width: 560px; max-height: 88vh; border-radius: 18px; padding: 20px 24px 22px; opacity: 0; transform: translate(-50%, -46%); transition: transform .2s ease, opacity .2s ease; }
   .sheet.show { opacity: 1; transform: translate(-50%, -50%); }
   .grab { display: none; }
@@ -1289,7 +1293,7 @@ var ExpenseParser = (function () {
     if (h.end) bits.push((T.end || 'Ends').toLowerCase() + ' ' + dmy(h.end));
     var who = [h.party, h.ref].filter(Boolean).join(' · ');
     return '<button class="hold' + (closed ? ' closed' : '') + '" data-hid="' + esc(h.id) + '">' +
-      '<div class="h1"><span class="nm">' + esc(h.name) + '</span><span class="val ' + (coverOnly ? '' : liab ? 'out' : 'in') + '">' + money(coverOnly ? h.amount : holdValue(h)) + '</span></div>' +
+      '<div class="h1"><span class="nm">' + esc(h.name) + '</span><span class="val ' + (coverOnly ? '' : liab ? 'out' : 'in') + '">' + whole(coverOnly ? h.amount : holdValue(h)) + '</span></div>' +
       '<div class="h1"><span class="meta" style="margin:0"><span class="tag">' + esc(h.type) + '</span>' + esc(who) + (closed ? ' · closed' : '') + '</span>' +
       '<span class="vl">' + esc(coverOnly ? 'Sum assured (cover)' : num(h.current) !== null ? T.cur : T.amt) + '</span></div>' +
       (bits.length ? '<div class="ln">' + bits.join(' · ') + '</div>' : '') + '</button>';
@@ -1309,9 +1313,9 @@ var ExpenseParser = (function () {
       var idLine = demat ? [a.dpId ? 'DP ' + a.dpId : '', a.clientId ? 'Client ' + lastDigits(a.clientId) : '', a.number ? 'BO ' + lastDigits(a.number) : ''].filter(Boolean).join(' \u00b7 ')
         : [lastDigits(a.number), a.ifsc].filter(Boolean).join(' \u00b7 ');
       return '<button class="hold acct' + (closed ? ' closed' : '') + '" data-aid="' + esc(a.id) + '">' +
-        '<div class="h1"><span class="nm">' + esc(a.name || a.institution) + '</span>' + (num(a.balance) !== null ? '<span class="val in">' + money(a.balance) + '</span>' : '') + '</div>' +
+        '<div class="h1"><span class="nm">' + esc(a.name || a.institution) + '</span>' + (num(a.balance) !== null ? '<span class="val in">' + whole(a.balance) + '</span>' : '') + '</div>' +
         '<div class="h1"><span class="meta" style="margin:0"><span class="tag">' + esc(a.accType || (demat ? 'Demat' : 'Bank')) + '</span>' + esc(a.name ? a.institution : (a.holder || '')) + (closed ? ' \u00b7 closed' : '') + '</span>' +
-        (num(a.balance) !== null ? '<span class="vl">' + (demat ? 'Holdings value' : 'Balance') + (a.inNetWorth === 'no' ? ' (not counted)' : '') + '</span>' : '') + '</div>' +
+        (num(a.balance) !== null ? '<span class="vl">' + (a.inNetWorth === 'no' ? 'Not counted' : demat ? 'Holdings' : 'Balance') + '</span>' : '') + '</div>' +
         (idLine ? '<div class="ln num">' + esc(idLine) + '</div>' : '') + '</button>';
     }).join('') + '</div>';
   }
@@ -1369,9 +1373,9 @@ var ExpenseParser = (function () {
     var ownHold = own;
     (D.accounts || []).forEach(function (a) { if (a.status !== 'closed' && a.inNetWorth !== 'no' && num(a.balance)) own += Number(a.balance); });
     var net = own - owe;
-    var html = '<div class="summary"><div><small>I own</small><b class="in">' + money(own) + '</b></div>' +
-      '<div><small>I owe</small><b class="out">' + money(owe) + '</b></div>' +
-      '<div><small>Net worth</small><b class="' + (net < 0 ? 'out' : '') + '">' + (net < 0 ? '−' : '') + money(net) + '</b></div></div>';
+    var html = '<div class="summary"><div><small>I own</small><b class="in">' + whole(own) + '</b></div>' +
+      '<div><small>I owe</small><b class="out">' + whole(owe) + '</b></div>' +
+      '<div><small>Net worth</small><b class="' + (net < 0 ? 'out' : '') + '">' + (net < 0 ? '−' : '') + whole(net) + '</b></div></div>';
     var notes = [];
     if (monthly) notes.push('Regular payments come to about <b>' + money(Math.round(monthly)) + '</b> a month');
     if (cover) notes.push('insurance cover <b>' + money(cover) + '</b>, shown separately because it is paid only on a claim or at maturity');
@@ -1391,7 +1395,7 @@ var ExpenseParser = (function () {
     function section(side, title, total) {
       var items = all.filter(function (h) { return h.side === side && (ui.showClosed || h.status !== 'closed'); })
         .sort(function (a, b) { return (a.status === 'closed') - (b.status === 'closed') || TYPES.indexOf(typeOf(a)) - TYPES.indexOf(typeOf(b)) || String(a.name).localeCompare(b.name); });
-      return '<div class="sect"><h2>' + title + '</h2><span class="' + (side === 'asset' ? 'in' : 'out') + '">' + money(total) + '</span></div>' +
+      return '<div class="sect"><h2>' + title + '</h2><span class="' + (side === 'asset' ? 'in' : 'out') + '">' + whole(total) + '</span></div>' +
         (items.length ? '<div class="hold-grid">' + items.map(holdCard).join('') + '</div>' : '<p class="muted" style="font-size:14px;margin:4px 2px">Nothing recorded yet.</p>');
     }
     html += section('asset', 'I own · to receive', ownHold) + section('liability', 'I owe · to give', owe);
