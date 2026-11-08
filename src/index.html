@@ -164,6 +164,16 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); m
 .paybox h3 { font-family: var(--serif); font-size: 16px; margin: 10px 0 0; }
 .checkline { display: flex; align-items: center; gap: 10px; font-size: 14px; margin-top: 12px; }
 
+/* notes */
+.kindseg { display: flex; justify-content: center; margin: 0 0 14px; }
+.kindseg .seg button { padding: 7px 22px; }
+.note { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--rule); padding: 11px 14px 11px 56px; }
+.note:last-child { border-bottom: 0; }
+.note .nt { font-size: 15px; font-weight: 500; }
+.note .nd { font-size: 14px; color: var(--ink-2); margin-top: 3px; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.note .nm { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.note .nm .out { font-weight: 500; }
+
 /* navigation */
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); padding-bottom: var(--safe-b); }
 nav.tabs .brand { display: none; }
@@ -246,6 +256,7 @@ nav.tabs button.on { color: var(--accent); }
   <section id="tab-diary" class="hidden"></section>
 
   <section id="tab-search" class="hidden">
+    <div class="kindseg" style="margin-bottom:10px"><div class="seg" id="searchKind"><button data-k="money" class="on">Transactions</button><button data-k="notes">Notes</button></div></div>
     <input class="t" id="q" type="search" placeholder="Search name, category, amount, reference" autocomplete="off">
     <div class="chips" id="typeChips"><button class="chip on" data-t="">All</button><button class="chip" data-t="expense">Expenses</button><button class="chip" data-t="income">Income</button></div>
     <div class="row2">
@@ -256,7 +267,7 @@ nav.tabs button.on { color: var(--accent); }
       <div><label class="f" for="minA">Min &#8377;</label><input class="t" type="number" inputmode="decimal" id="minA"></div>
       <div><label class="f" for="maxA">Max &#8377;</label><input class="t" type="number" inputmode="decimal" id="maxA"></div>
     </div>
-    <label class="f" for="catF">Category</label>
+    <label class="f" for="catF" id="catFL">Category</label>
     <select class="t" id="catF"><option value="">All categories</option></select>
     <div style="height:14px"></div>
     <div id="results"></div>
@@ -387,6 +398,32 @@ nav.tabs button.on { color: var(--accent); }
   <div class="btns"><button class="btn danger block hidden" id="hDelete">Delete this item</button></div>
 </div>
 
+<!-- note editor -->
+<div class="sheet hidden" id="noteSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2 id="nHead">New note</h2>
+  <div class="row2">
+    <div><label class="f" for="nDate">Date</label><input class="t" id="nDate" type="date"></div>
+    <div><label class="f" for="nTime">Time</label><input class="t" id="nTime" type="time"></div>
+  </div>
+  <label class="f" for="nTitle">Title</label>
+  <input class="t" id="nTitle" autocomplete="off" placeholder="e.g. New car battery">
+  <label class="f" for="nLabel">Label</label>
+  <select class="t" id="nLabel"></select>
+  <label class="f" for="nDetails">Details</label>
+  <textarea class="t" id="nDetails" style="min-height:120px" placeholder="Anything you want to remember"></textarea>
+  <div class="row2">
+    <div><label class="f" for="nAmount">Amount &#8377; (optional)</label><input class="t" id="nAmount" type="number" inputmode="decimal" step="0.01"></div>
+    <div><label class="f" for="nRemind">Remind me on (optional)</label><input class="t" id="nRemind" type="date"></div>
+  </div>
+  <label class="checkline" id="nExpWrap"><input type="checkbox" id="nExpense"> Also add this amount to my expenses</label>
+  <div class="btns">
+    <button class="btn primary" id="nSave">Save</button>
+    <button class="btn" data-close>Cancel</button>
+  </div>
+  <div class="btns"><button class="btn danger block hidden" id="nDelete">Delete note</button></div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -442,7 +479,7 @@ nav.tabs button.on { color: var(--accent); }
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }
   function remote() { return !!(cfg.url && cfg.token); }
-  function emptyData() { return { entries: [], inbox: [], holdings: [] }; }
+  function emptyData() { return { entries: [], inbox: [], holdings: [], notes: [] }; }
   function localData() {
     var d = load('ed2.local', null);
     if (d) return d;
@@ -453,12 +490,12 @@ nav.tabs button.on { color: var(--accent); }
     return d;
   }
   var D = remote() ? load('ed2.remote', emptyData()) : snapshot(localData());
-  function snapshot(d) { return { entries: d.entries, inbox: d.inbox.filter(function (x) { return x.status === 'new'; }), holdings: d.holdings }; }
+  function snapshot(d) { return { entries: d.entries, inbox: d.inbox.filter(function (x) { return x.status === 'new'; }), holdings: d.holdings, notes: d.notes || [] }; }
 
   var ui = {
     tab: D.inbox.length ? 'confirm' : 'diary', view: 'month', y: new Date().getFullYear(), m: new Date().getMonth(),
     lastSync: load('ed.lastSync', null), refreshing: false, navigated: false,
-    sel: {}, edits: {}, searchType: '', sumFilter: '', catFilter: '', showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
+    sel: {}, edits: {}, searchType: '', sumFilter: '', catFilter: '', diaryKind: 'money', searchKind: 'money', note: null, showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
   };
 
   /* ---------- this-browser store, used until the Sheet is connected ---------- */
@@ -468,6 +505,10 @@ nav.tabs button.on { color: var(--accent); }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) throw new Error('Please choose a date.');
     if (!(Number(e.amount) > 0)) throw new Error('Please enter an amount.');
     if (e.type !== 'expense' && e.type !== 'income') throw new Error('Choose expense or income.');
+  }
+  function validateNote(n) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(n.date || '')) throw new Error('Please choose a date.');
+    if (!String(n.title || '').trim() && !String(n.details || '').trim()) throw new Error('Please write a title or some details.');
   }
   function validateHolding(h) {
     if (!String(h.name || '').trim()) throw new Error('Please give the item a name.');
@@ -483,18 +524,20 @@ nav.tabs button.on { color: var(--accent); }
     }
     function op(o) {
       if (o.action === 'save') {
-        var list = o.kind === 'entry' ? d.entries : d.holdings, it = Object.assign({}, o.item);
-        if (o.kind === 'entry') validateEntry(it); else validateHolding(it);
+        if (!d.notes) d.notes = [];
+        var list = o.kind === 'entry' ? d.entries : o.kind === 'note' ? d.notes : d.holdings, it = Object.assign({}, o.item);
+        if (o.kind === 'entry') validateEntry(it); else if (o.kind === 'note') validateNote(it); else validateHolding(it);
         var i = it.id ? list.findIndex(function (x) { return x.id === it.id; }) : -1;
         it.updated = now;
         if (i >= 0) list[i] = Object.assign({}, list[i], it);
         else {
           it.id = uid(); it.created = now;
-          if (o.kind === 'entry') { it.source = it.source || 'manual'; it.status = 'confirmed'; } else it.status = it.status || 'active';
+          if (o.kind === 'entry') { it.source = it.source || 'manual'; it.status = 'confirmed'; } else if (o.kind === 'holding') it.status = it.status || 'active';
           list.push(it);
         }
       } else if (o.action === 'delete') {
-        var k = o.kind === 'entry' ? 'entries' : 'holdings';
+        var k = o.kind === 'entry' ? 'entries' : o.kind === 'note' ? 'notes' : 'holdings';
+        if (!d[k]) d[k] = [];
         d[k] = d[k].filter(function (x) { return x.id !== o.id; });
       } else if (o.action === 'ingest') {
         var p = ExpenseParser.parse(o.text, new Date());
@@ -537,7 +580,8 @@ nav.tabs button.on { color: var(--accent); }
   }
   function apply(j) {
     if (j && j.entries) {
-      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], sheetId: j.sheetId || D.sheetId || '', sheetUrl: j.sheetUrl || D.sheetUrl || '' };
+      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], notes: j.notes || [], notesOk: !!j.notes,
+        sheetId: j.sheetId || D.sheetId || '', sheetUrl: j.sheetUrl || D.sheetUrl || '' };
       if (remote()) { store('ed2.remote', D); ui.lastSync = Date.now(); store('ed.lastSync', ui.lastSync); }
     }
     render();
@@ -777,6 +821,13 @@ nav.tabs button.on { color: var(--accent); }
   }
   function renderDiary() {
     var el = $('tab-diary');
+    if (ui.diaryKind === 'notes') { $('periodLabel').textContent = ui.view === 'month' ? MONTHS[ui.m] + ' ' + ui.y : String(ui.y); renderNotes(el); }
+    else renderMoney(el);
+    el.insertAdjacentHTML('afterbegin', '<div class="kindseg"><div class="seg" id="kindSeg">' +
+      '<button data-kind="money" class="' + (ui.diaryKind === 'money' ? 'on' : '') + '">Money</button>' +
+      '<button data-kind="notes" class="' + (ui.diaryKind === 'notes' ? 'on' : '') + '">Notes</button></div></div>');
+  }
+  function renderMoney(el) {
     $('periodLabel').textContent = ui.view === 'month' ? MONTHS[ui.m] + ' ' + ui.y : String(ui.y);
     if (ui.view === 'year') {
       var yl = D.entries.filter(function (e) { return String(e.date).slice(0, 4) === String(ui.y); }), months = [], max = 1;
@@ -804,8 +855,106 @@ nav.tabs button.on { color: var(--accent); }
       : '<div class="empty">No entries in ' + MONTHS[ui.m] + ' ' + ui.y + '.<small>Confirm transactions from the Confirm page, or tap + to add a cash entry.</small></div>');
   }
 
+  /* ---------- notes ---------- */
+  var LABELS = ['Vehicle', 'Travel', 'Occasion', 'Home', 'Health', 'Personal', 'Work', 'Other'];
+  var LABEL_CAT = { Vehicle: 'Travel', Travel: 'Travel', Occasion: 'Gifts', Home: 'Others', Health: 'Health', Personal: 'Personal', Work: 'Others', Other: 'Others' };
+  function notesList() { return D.notes || []; }
+  function noteHtml(n, showDate) {
+    var bits = [];
+    if (showDate) bits.push(dmy(n.date));
+    if (n.time) bits.push(esc(n.time));
+    if (num(n.amount)) bits.push('<span class="out">' + money(n.amount) + '</span>');
+    if (n.remind) bits.push('remind ' + dmy(n.remind));
+    return '<button class="note" data-nid="' + esc(n.id) + '">' +
+      '<div class="nt">' + (n.label ? '<span class="tag">' + esc(n.label) + '</span>' : '') + esc(n.title || (n.details || '').split('\n')[0]) + '</div>' +
+      (n.title && n.details ? '<div class="nd">' + esc(n.details) + '</div>' : '') +
+      (bits.length ? '<div class="nm">' + bits.join(' \u00b7 ') + '</div>' : '') + '</button>';
+  }
+  function noteDaysHtml(list) {
+    var groups = {};
+    list.slice().sort(function (a, b) { return (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')); })
+      .forEach(function (n) { (groups[n.date] = groups[n.date] || []).push(n); });
+    return Object.keys(groups).sort().reverse().map(function (d) {
+      var p = d.split('-');
+      return '<div class="day"><div class="day-num">' + (+p[2]) + '</div><div class="day-head"><span class="d">' + DAYS[dateOf(d).getDay()] + '<em>' + dmy(d) + '</em></span>' +
+        '<span class="net">' + groups[d].length + ' note' + (groups[d].length > 1 ? 's' : '') + '</span></div>' +
+        groups[d].map(function (n) { return noteHtml(n, false); }).join('') + '</div>';
+    }).join('');
+  }
+  function renderNotes(el) {
+    if (remote() && D.notesOk === false) {
+      el.innerHTML = '<div class="card"><h3>Notes need a small update</h3><p>Your Google service was set up before Notes existed. Paste the latest code into your copy of the service and choose Deploy, then Manage deployments, then New version. Your money diary keeps working as before in the meantime.</p></div>';
+      return;
+    }
+    var all = notesList(), html = '';
+    var soon = all.filter(function (n) { if (!n.remind) return false; var d = daysFromToday(n.remind); return d >= -7 && d <= 30; })
+      .sort(function (a, b) { return a.remind.localeCompare(b.remind); });
+    if (soon.length) {
+      html += '<div class="dues" style="margin-bottom:14px"><h3>Coming up</h3>' + soon.map(function (n) {
+        var d = daysFromToday(n.remind);
+        var w = d < 0 ? (-d) + ' day' + (d === -1 ? '' : 's') + ' ago' : d === 0 ? 'Today' : 'In ' + d + ' day' + (d === 1 ? '' : 's');
+        return '<button class="due" data-nid="' + esc(n.id) + '"><span>' + esc(n.title || 'Note') + '</span><span class="a">' + dmy(n.remind) + '</span>' +
+          '<span class="w' + (d < 0 ? ' late' : '') + '">' + w + (n.label ? ' \u00b7 ' + esc(n.label) : '') + '</span></button>';
+      }).join('') + '</div>';
+    }
+    var key = ui.view === 'month' ? ui.y + '-' + pad(ui.m + 1) : String(ui.y);
+    var list = all.filter(function (n) { return String(n.date).slice(0, key.length) === key; });
+    var name = ui.view === 'month' ? MONTHS[ui.m] + ' ' + ui.y : String(ui.y);
+    html += list.length ? noteDaysHtml(list)
+      : '<div class="empty">No notes in ' + name + '.<small>Tap + to write one: a purchase to remember, a trip, an occasion, anything worth keeping.</small></div>';
+    el.innerHTML = html;
+  }
+  function openNote(n) {
+    ui.note = n || null;
+    var x = n || { date: defaultNewDate(), label: 'Personal' };
+    $('nHead').textContent = n ? 'Edit note' : 'New note';
+    $('nDate').value = x.date || today(); $('nTime').value = x.time || '';
+    $('nTitle').value = x.title || ''; $('nDetails').value = x.details || '';
+    $('nLabel').innerHTML = LABELS.concat(x.label && LABELS.indexOf(x.label) < 0 ? [x.label] : []).map(function (l) {
+      return '<option' + (l === x.label ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('');
+    $('nAmount').value = num(x.amount) !== null ? x.amount : ''; $('nRemind').value = x.remind || '';
+    $('nExpense').checked = false; $('nExpWrap').classList.toggle('hidden', !!n);
+    $('nDelete').classList.toggle('hidden', !n);
+    openModal('noteSheet');
+    if (!n) setTimeout(function () { $('nTitle').focus(); }, 280);
+  }
+
   /* ---------- search ---------- */
+  function renderNoteSearch() {
+    var q = $('q').value.trim().toLowerCase(), from = $('from').value, to = $('to').value, lab = $('catF').value;
+    var minA = parseFloat($('minA').value), maxA = parseFloat($('maxA').value), out = $('results');
+    if (!(q || from || to || lab || !isNaN(minA) || !isNaN(maxA))) {
+      out.innerHTML = '<div class="empty" style="padding-top:20px">Search your notes.<small>Try a word such as battery, a place, or choose a label.</small></div>';
+      return;
+    }
+    var list = notesList().filter(function (n) {
+      if (from && n.date < from) return false;
+      if (to && n.date > to) return false;
+      if (lab && n.label !== lab) return false;
+      if (!isNaN(minA) && !(Number(n.amount) >= minA)) return false;
+      if (!isNaN(maxA) && !(Number(n.amount) <= maxA)) return false;
+      if (q) {
+        var hay = [n.title, n.details, n.label, n.amount, dmy(n.date), n.remind ? dmy(n.remind) : ''].join(' ').toLowerCase();
+        if (q.split(/\s+/).some(function (w) { return hay.indexOf(w) < 0; })) return false;
+      }
+      return true;
+    });
+    out.innerHTML = '<div class="result-total">' + list.length + ' note' + (list.length === 1 ? '' : 's') + ' found</div>' +
+      (list.length ? noteDaysHtml(list) : '<div class="empty">No matching notes.</div>');
+  }
+  function setSearchKind(k) {
+    ui.searchKind = k;
+    document.querySelectorAll('#searchKind button').forEach(function (b) { b.classList.toggle('on', b.dataset.k === k); });
+    $('typeChips').classList.toggle('hidden', k === 'notes');
+    $('catFL').textContent = k === 'notes' ? 'Label' : 'Category';
+    $('q').placeholder = k === 'notes' ? 'Search words in your notes' : 'Search name, category, amount, reference';
+    var sel = $('catF');
+    sel.innerHTML = '<option value="">' + (k === 'notes' ? 'All labels' : 'All categories') + '</option>';
+    if (k === 'notes') LABELS.forEach(function (l) { var o = document.createElement('option'); o.value = o.textContent = l; sel.appendChild(o); });
+    renderSearch();
+  }
   function renderSearch() {
+    if (ui.searchKind === 'notes') { renderNoteSearch(); return; }
     var q = $('q').value.trim().toLowerCase(), from = $('from').value, to = $('to').value;
     var minA = parseFloat($('minA').value), maxA = parseFloat($('maxA').value), cat = $('catF').value;
     var sel = $('catF'), have = Array.prototype.map.call(sel.options, function (o) { return o.value; }), cats = {};
@@ -919,7 +1068,7 @@ nav.tabs button.on { color: var(--accent); }
     Object.keys(TITLES).forEach(function (t) { $('tab-' + t).classList.toggle('hidden', ui.tab !== t); });
     document.querySelectorAll('#tabs button').forEach(function (x) { x.classList.toggle('on', x.dataset.tab === ui.tab); });
     $('addBtn').classList.toggle('hidden', ui.tab === 'settings');
-    $('addBtn').setAttribute('aria-label', ui.tab === 'assets' ? 'Add asset or liability' : 'Add income or expense');
+    $('addBtn').setAttribute('aria-label', ui.tab === 'assets' ? 'Add asset or liability' : ui.tab === 'diary' && ui.diaryKind === 'notes' ? 'Add a note' : 'Add income or expense');
     if (ui.tab === 'confirm') { renderConfirm(); renderAndroid(); }
     if (ui.tab === 'diary') renderDiary();
     if (ui.tab === 'search') renderSearch();
@@ -1083,6 +1232,8 @@ nav.tabs button.on { color: var(--accent); }
   mainEl.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-open]'))) { var it = D.inbox.find(function (i) { return i.id === x.dataset.open; }); if (it) openEntry(it, 'inbox'); return; }
+    if ((x = t.closest('[data-kind]'))) { ui.diaryKind = x.dataset.kind; clearFilters(); renderDiary(); render(); return; }
+    if ((x = t.closest('[data-nid]'))) { var nn = notesList().find(function (i) { return i.id === x.dataset.nid; }); if (nn) openNote(nn); return; }
     if ((x = t.closest('[data-sum]'))) {
       var want = x.dataset.sum === 'all' ? '' : x.dataset.sum;
       ui.catFilter = '';
@@ -1156,7 +1307,34 @@ nav.tabs button.on { color: var(--accent); }
     }).catch(function () {});
   };
 
-  $('addBtn').onclick = function () { if (ui.tab === 'assets') openHolding(null); else openEntry(null, 'new'); };
+  $('addBtn').onclick = function () {
+    if (ui.tab === 'assets') openHolding(null);
+    else if (ui.tab === 'diary' && ui.diaryKind === 'notes') {
+      if (remote() && D.notesOk === false) { toast('Notes need the service update described on this page.'); return; }
+      openNote(null);
+    }
+    else openEntry(null, 'new');
+  };
+  $('nSave').onclick = function () {
+    var n = {
+      date: $('nDate').value, time: $('nTime').value, title: $('nTitle').value.trim(), details: $('nDetails').value.trim(),
+      label: $('nLabel').value, amount: $('nAmount').value === '' ? '' : Math.round(parseFloat($('nAmount').value) * 100) / 100, remind: $('nRemind').value
+    };
+    if (!n.date) { toast('Please choose a date.'); return; }
+    if (!n.title && !n.details) { toast('Please write a title or some details.'); $('nTitle').focus(); return; }
+    var ops = [{ action: 'save', kind: 'note', item: ui.note ? Object.assign({ id: ui.note.id }, n) : n }];
+    var addExp = !ui.note && $('nExpense').checked && Number(n.amount) > 0;
+    if (addExp) ops.push({ action: 'save', kind: 'entry', item: { type: 'expense', amount: n.amount, date: n.date, time: n.time,
+      category: LABEL_CAT[n.label] || 'Others', description: n.title || n.details.slice(0, 60), mode: '' } });
+    busy(this, act('batch', { ops: ops })).then(function () {
+      closeModal(); toast(addExp ? 'Note saved and added to expenses' : 'Note saved');
+      if (!ui.note && ui.view === 'month') { var d = n.date.split('-'); ui.y = +d[0]; ui.m = +d[1] - 1; render(); }
+    }).catch(function () {});
+  };
+  $('nDelete').onclick = function () {
+    if (!ui.note || !confirm('Delete this note? This cannot be undone.')) return;
+    busy(this, act('delete', { kind: 'note', id: ui.note.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
+  };
   $('modalBg').onclick = closeModal;
   document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = closeModal; });
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeModal(); });
@@ -1215,6 +1393,7 @@ nav.tabs button.on { color: var(--accent); }
   };
 
   ['q', 'from', 'to', 'minA', 'maxA', 'catF'].forEach(function (id) { $(id).addEventListener('input', renderSearch); });
+  $('searchKind').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) setSearchKind(b.dataset.k); });
   $('typeChips').addEventListener('click', function (ev) {
     var b = ev.target.closest('.chip'); if (!b) return;
     ui.searchType = b.dataset.t;

@@ -67,6 +67,15 @@ ok(q.ok && q.added === true, 'Shortcut url-encoded form accepted');
 
 ok(P({ action: 'refresh' }).sheetId === 'x', 'refresh tells the app which Sheet holds the data');
 
+// Notes
+s = P({ action: 'save', kind: 'note', item: { date: '2026-11-08', title: 'New car battery', details: 'Amaron 55Ah, 48 months warranty', label: 'Vehicle', amount: '6,450', remind: '2030-11-08' } });
+ok(s.notes.length === 1 && s.notes[0].amount === 6450 && s.notes[0].remind === '2030-11-08' && s.features.indexOf('notes') >= 0, 'note saved with amount and reminder');
+ok(P({ action: 'save', kind: 'note', item: { date: '2026-11-08' } }).ok === false, 'empty note rejected');
+s = P({ action: 'save', kind: 'note', item: { id: s.notes[0].id, details: 'Amaron 55Ah, 48 months warranty, bill in glovebox' } });
+ok(s.notes.length === 1 && /glovebox/.test(s.notes[0].details) && s.notes[0].title === 'New car battery', 'note edited in place');
+s = P({ action: 'delete', kind: 'note', id: s.notes[0].id });
+ok(s.notes.length === 0, 'note deleted');
+
 // One-time connect page
 let page = g.ctx.doGet({ parameter: { connect: '' } }).html;
 ok(/expensediary:\/\/setup\?cfg=/.test(page) && page.indexOf(encodeURIComponent(T)) > 0, 'connect page offers the app link with the key');

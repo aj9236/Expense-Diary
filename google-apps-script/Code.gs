@@ -266,11 +266,13 @@ var KINDS = {
     'mode', 'ref', 'balance', 'source', 'status', 'note', 'raw', 'created', 'updated'] },
   inbox: { sheet: 'Inbox', headers: ['id', 'date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank',
     'mode', 'ref', 'balance', 'source', 'status', 'msgId', 'entryId', 'raw', 'received', 'updated'] },
+  note: { sheet: 'Notes', headers: ['id', 'date', 'time', 'title', 'details', 'label', 'amount', 'remind', 'created', 'updated'] },
   holding: { sheet: 'Holdings', headers: ['id', 'side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment',
     'frequency', 'start', 'end', 'nextDue', 'status', 'notes', 'created', 'updated'] }
 };
 var NUMERIC = { amount: 1, balance: 1, current: 1, rate: 1, installment: 1 };
-var DATE_KEYS = { date: 1, start: 1, end: 1, nextDue: 1 };
+var DATE_KEYS = { date: 1, start: 1, end: 1, nextDue: 1, remind: 1 };
+var NOTE_FIELDS = ['date', 'time', 'title', 'details', 'label', 'amount', 'remind'];
 var ENTRY_FIELDS = ['date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank', 'mode', 'ref', 'balance', 'source', 'raw', 'note'];
 var HOLDING_FIELDS = ['side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment', 'frequency', 'start', 'end', 'nextDue', 'status', 'notes'];
 var PROCESSED_LABEL = 'ExpenseDiary-Processed';
@@ -416,6 +418,8 @@ function withSnapshot_(o) {
   o.entries = readAll_('entry');
   o.inbox = readAll_('inbox').filter(function (x) { return x.status === 'new'; });
   o.holdings = readAll_('holding');
+  o.notes = readAll_('note');
+  o.features = ['notes'];
   o.lastScan = Number(PropertiesService.getScriptProperties().getProperty('LAST_SCAN') || 0);
   try { var book = ss_(); o.sheetId = book.getId(); o.sheetUrl = book.getUrl(); } catch (e) { }
   return o;
@@ -522,8 +526,8 @@ function setInboxStatus_(ids, status) {
 
 /* ---------- entries and holdings ---------- */
 function save_(kind, input) {
-  if (kind !== 'entry' && kind !== 'holding') throw new Error('Unknown record type.');
-  var fields = kind === 'entry' ? ENTRY_FIELDS : HOLDING_FIELDS;
+  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note') throw new Error('Unknown record type.');
+  var fields = kind === 'entry' ? ENTRY_FIELDS : kind === 'note' ? NOTE_FIELDS : HOLDING_FIELDS;
   var clean = {};
   fields.forEach(function (k) { if (input[k] !== undefined && input[k] !== null) clean[k] = NUMERIC[k] ? toNum_(input[k]) : String(input[k]); });
 
@@ -538,6 +542,8 @@ function save_(kind, input) {
     if (!obj.source) obj.source = 'manual';
     obj.status = 'confirmed';
     validateEntry_(obj);
+  } else if (kind === 'note') {
+    validateNote_(obj);
   } else {
     if (!obj.status) obj.status = 'active';
     validateHolding_(obj);
@@ -552,6 +558,12 @@ function validateEntry_(o) {
   if (o.type !== 'expense' && o.type !== 'income') throw new Error('Type must be expense or income.');
 }
 
+function validateNote_(o) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(o.date || ''))) throw new Error('A valid date is required.');
+  if (!String(o.title || '').trim() && !String(o.details || '').trim()) throw new Error('Please write a title or some details.');
+  if (o.remind && !/^\d{4}-\d{2}-\d{2}$/.test(o.remind)) throw new Error('The reminder date is not valid.');
+}
+
 function validateHolding_(o) {
   if (!String(o.name || '').trim()) throw new Error('Please give the item a name.');
   if (!String(o.type || '').trim()) throw new Error('Please choose a type.');
@@ -562,7 +574,7 @@ function validateHolding_(o) {
 }
 
 function remove_(kind, id) {
-  if (kind !== 'entry' && kind !== 'holding') throw new Error('Unknown record type.');
+  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note') throw new Error('Unknown record type.');
   var tab = rows_(kind);
   for (var i = tab.rows.length - 1; i >= 0; i--) {
     if (tab.rows[i].obj.id === String(id)) { tab.sheet.deleteRow(tab.rows[i].r); return true; }
