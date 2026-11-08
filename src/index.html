@@ -992,14 +992,15 @@ nav.tabs button.on { color: var(--accent); }
       var dd = daysFromToday(h.nextDue);
       bits.push('<span class="' + (dd < 0 ? 'out' : '') + '">next due ' + dmy(h.nextDue) + (dd < 0 ? ' (overdue)' : '') + '</span>');
     }
-    if (h.type === 'Insurance' && num(h.amount)) bits.push('cover ' + money(h.amount));
+    var coverOnly = h.type === 'Insurance' && num(h.current) === null && num(h.amount) !== null;
+    if (h.type === 'Insurance' && num(h.amount) && !coverOnly) bits.push('cover ' + money(h.amount));
     if (num(h.rate)) bits.push(h.rate + '%');
     if (h.end) bits.push((T.end || 'Ends').toLowerCase() + ' ' + dmy(h.end));
     var who = [h.party, h.ref].filter(Boolean).join(' · ');
     return '<button class="hold' + (closed ? ' closed' : '') + '" data-hid="' + esc(h.id) + '">' +
-      '<div class="h1"><span class="nm">' + esc(h.name) + '</span><span class="val ' + (liab ? 'out' : 'in') + '">' + money(holdValue(h)) + '</span></div>' +
+      '<div class="h1"><span class="nm">' + esc(h.name) + '</span><span class="val ' + (coverOnly ? '' : liab ? 'out' : 'in') + '">' + money(coverOnly ? h.amount : holdValue(h)) + '</span></div>' +
       '<div class="h1"><span class="meta" style="margin:0"><span class="tag">' + esc(h.type) + '</span>' + esc(who) + (closed ? ' · closed' : '') + '</span>' +
-      '<span class="vl">' + esc(num(h.current) !== null ? T.cur : T.amt) + '</span></div>' +
+      '<span class="vl">' + esc(coverOnly ? 'Sum assured (cover)' : num(h.current) !== null ? T.cur : T.amt) + '</span></div>' +
       (bits.length ? '<div class="ln">' + bits.join(' · ') + '</div>' : '') + '</button>';
   }
   function renderAssets() {
@@ -1023,7 +1024,7 @@ nav.tabs button.on { color: var(--accent); }
       '<div><small>Net worth</small><b class="' + (net < 0 ? 'out' : '') + '">' + (net < 0 ? '−' : '') + money(net) + '</b></div></div>';
     var notes = [];
     if (monthly) notes.push('Regular payments come to about <b>' + money(Math.round(monthly)) + '</b> a month');
-    if (cover) notes.push('insurance cover ' + money(cover));
+    if (cover) notes.push('insurance cover <b>' + money(cover) + '</b>, shown separately because it is paid only on a claim or at maturity');
     if (notes.length) html += '<p class="sumnote">' + notes.join(' · ') + '.</p>';
 
     var dues = active.filter(function (h) { return h.nextDue && daysFromToday(h.nextDue) <= 30; })
