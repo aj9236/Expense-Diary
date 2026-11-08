@@ -76,6 +76,15 @@ ok(s.notes.length === 1 && /glovebox/.test(s.notes[0].details) && s.notes[0].tit
 s = P({ action: 'delete', kind: 'note', id: s.notes[0].id });
 ok(s.notes.length === 0, 'note deleted');
 
+// Bank and demat accounts
+s = P({ action: 'save', kind: 'account', item: { group: 'bank', name: 'Salary account', institution: 'Federal Bank', accType: 'Savings', number: '12340100002507', ifsc: 'FDRL0001234', balance: '45,000', inNetWorth: 'yes' } });
+ok(s.accounts.length === 1 && s.accounts[0].number === '12340100002507' && s.accounts[0].balance === 45000 && s.accounts[0].status === 'active', 'bank account saved; long number kept as text');
+s = P({ action: 'save', kind: 'account', item: { group: 'demat', institution: 'Zerodha', accType: 'Demat + Trading', dpId: 'IN300394', clientId: 'AB1234' } });
+ok(s.accounts.length === 2 && s.features.indexOf('accounts') >= 0, 'demat account saved');
+ok(P({ action: 'save', kind: 'account', item: { group: 'bank' } }).ok === false, 'account without a name rejected');
+s = P({ action: 'delete', kind: 'account', id: s.accounts[1].id });
+ok(s.accounts.length === 1, 'account deleted');
+
 // One-time connect page
 let page = g.ctx.doGet({ parameter: { connect: '' } }).html;
 ok(/expensediary:\/\/setup\?cfg=/.test(page) && page.indexOf(encodeURIComponent(T)) > 0, 'connect page offers the app link with the key');

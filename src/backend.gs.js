@@ -31,6 +31,8 @@ var KINDS = {
     'mode', 'ref', 'balance', 'source', 'status', 'note', 'raw', 'created', 'updated'] },
   inbox: { sheet: 'Inbox', headers: ['id', 'date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank',
     'mode', 'ref', 'balance', 'source', 'status', 'msgId', 'entryId', 'raw', 'received', 'updated'] },
+  account: { sheet: 'Accounts', headers: ['id', 'group', 'name', 'institution', 'accType', 'holder', 'number', 'ifsc', 'branch', 'customerId',
+    'dpId', 'clientId', 'nominee', 'mobile', 'email', 'balance', 'inNetWorth', 'status', 'notes', 'created', 'updated'] },
   note: { sheet: 'Notes', headers: ['id', 'date', 'time', 'title', 'details', 'label', 'amount', 'remind', 'created', 'updated'] },
   holding: { sheet: 'Holdings', headers: ['id', 'side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment',
     'frequency', 'start', 'end', 'nextDue', 'status', 'notes', 'created', 'updated'] }
@@ -38,6 +40,8 @@ var KINDS = {
 var NUMERIC = { amount: 1, balance: 1, current: 1, rate: 1, installment: 1 };
 var DATE_KEYS = { date: 1, start: 1, end: 1, nextDue: 1, remind: 1 };
 var NOTE_FIELDS = ['date', 'time', 'title', 'details', 'label', 'amount', 'remind'];
+var ACCOUNT_FIELDS = ['group', 'name', 'institution', 'accType', 'holder', 'number', 'ifsc', 'branch', 'customerId', 'dpId', 'clientId',
+  'nominee', 'mobile', 'email', 'balance', 'inNetWorth', 'status', 'notes'];
 var ENTRY_FIELDS = ['date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank', 'mode', 'ref', 'balance', 'source', 'raw', 'note'];
 var HOLDING_FIELDS = ['side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment', 'frequency', 'start', 'end', 'nextDue', 'status', 'notes'];
 var PROCESSED_LABEL = 'ExpenseDiary-Processed';
@@ -184,7 +188,8 @@ function withSnapshot_(o) {
   o.inbox = readAll_('inbox').filter(function (x) { return x.status === 'new'; });
   o.holdings = readAll_('holding');
   o.notes = readAll_('note');
-  o.features = ['notes'];
+  o.accounts = readAll_('account');
+  o.features = ['notes', 'accounts'];
   o.lastScan = Number(PropertiesService.getScriptProperties().getProperty('LAST_SCAN') || 0);
   try { var book = ss_(); o.sheetId = book.getId(); o.sheetUrl = book.getUrl(); } catch (e) { }
   return o;
@@ -291,8 +296,8 @@ function setInboxStatus_(ids, status) {
 
 /* ---------- entries and holdings ---------- */
 function save_(kind, input) {
-  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note') throw new Error('Unknown record type.');
-  var fields = kind === 'entry' ? ENTRY_FIELDS : kind === 'note' ? NOTE_FIELDS : HOLDING_FIELDS;
+  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note' && kind !== 'account') throw new Error('Unknown record type.');
+  var fields = kind === 'entry' ? ENTRY_FIELDS : kind === 'note' ? NOTE_FIELDS : kind === 'account' ? ACCOUNT_FIELDS : HOLDING_FIELDS;
   var clean = {};
   fields.forEach(function (k) { if (input[k] !== undefined && input[k] !== null) clean[k] = NUMERIC[k] ? toNum_(input[k]) : String(input[k]); });
 
@@ -309,6 +314,10 @@ function save_(kind, input) {
     validateEntry_(obj);
   } else if (kind === 'note') {
     validateNote_(obj);
+  } else if (kind === 'account') {
+    if (!obj.status) obj.status = 'active';
+    if (obj.group !== 'bank' && obj.group !== 'demat') throw new Error('Choose bank or demat.');
+    if (!String(obj.name || obj.institution || '').trim()) throw new Error('Please enter the bank or broker name.');
   } else {
     if (!obj.status) obj.status = 'active';
     validateHolding_(obj);
@@ -339,7 +348,7 @@ function validateHolding_(o) {
 }
 
 function remove_(kind, id) {
-  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note') throw new Error('Unknown record type.');
+  if (kind !== 'entry' && kind !== 'holding' && kind !== 'note' && kind !== 'account') throw new Error('Unknown record type.');
   var tab = rows_(kind);
   for (var i = tab.rows.length - 1; i >= 0; i--) {
     if (tab.rows[i].obj.id === String(id)) { tab.sheet.deleteRow(tab.rows[i].r); return true; }

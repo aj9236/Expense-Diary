@@ -174,6 +174,15 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); m
 .note .nm { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
 .note .nm .out { font-weight: 500; }
 
+/* accounts */
+.sect .add { background: none; border: 1px solid var(--rule); border-radius: 16px; padding: 4px 12px; font-size: 13px; color: var(--accent); }
+.acct .num { font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.warn { font-size: 13px; color: var(--pending); background: var(--pending-bg); border-radius: 10px; padding: 8px 12px; margin: 8px 0 4px; line-height: 1.45; }
+.copyrow { display: flex; gap: 8px; align-items: center; }
+.copyrow input { flex: 1; }
+#aGroup button.on { background: var(--ink); color: var(--paper); }
+.copybtn { flex: none; min-height: 44px; border-radius: 10px; border: 1px solid var(--rule); background: var(--page); padding: 0 12px; font-size: 13px; color: var(--ink-2); }
+
 /* navigation */
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--rule); padding-bottom: var(--safe-b); }
 nav.tabs .brand { display: none; }
@@ -398,6 +407,50 @@ nav.tabs button.on { color: var(--accent); }
   <div class="btns"><button class="btn danger block hidden" id="hDelete">Delete this item</button></div>
 </div>
 
+<!-- bank / demat account editor -->
+<div class="sheet hidden" id="acctSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2 id="aHead">New account</h2>
+  <div class="typeseg" id="aGroup"><button data-g="bank" class="out on">Bank account</button><button data-g="demat" class="in">Demat / trading</button></div>
+  <p class="warn">Never store passwords, PINs, MPIN, CVV, OTPs or card numbers here.</p>
+  <div class="row2">
+    <div><label class="f" for="aInst" id="aInstL">Bank</label><input class="t" id="aInst" autocomplete="off" placeholder="e.g. Federal Bank"></div>
+    <div><label class="f" for="aType">Account type</label><select class="t" id="aType"></select></div>
+  </div>
+  <label class="f" for="aName">Nickname (optional)</label>
+  <input class="t" id="aName" autocomplete="off" placeholder="e.g. Salary account">
+  <label class="f" for="aHolder">Account holder(s)</label>
+  <input class="t" id="aHolder" autocomplete="off">
+  <label class="f" for="aNum" id="aNumL">Account number</label>
+  <div class="copyrow"><input class="t" id="aNum" inputmode="numeric" autocomplete="off" spellcheck="false"><button class="copybtn" data-copy="aNum">Copy</button></div>
+  <div id="aBankOnly">
+    <label class="f" for="aIfsc">IFSC</label>
+    <div class="copyrow"><input class="t" id="aIfsc" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="copybtn" data-copy="aIfsc">Copy</button></div>
+    <div class="row2">
+      <div><label class="f" for="aCust">Customer ID</label><input class="t" id="aCust" autocomplete="off" spellcheck="false"></div>
+      <div><label class="f" for="aBranch">Branch</label><input class="t" id="aBranch" autocomplete="off"></div>
+    </div>
+  </div>
+  <div id="aDematOnly" class="row2 hidden">
+    <div><label class="f" for="aDp">DP ID</label><input class="t" id="aDp" autocomplete="off" spellcheck="false"></div>
+    <div><label class="f" for="aClient">Client ID</label><input class="t" id="aClient" autocomplete="off" spellcheck="false"></div>
+  </div>
+  <label class="f" for="aNominee">Nominee</label>
+  <input class="t" id="aNominee" autocomplete="off">
+  <div class="row2">
+    <div><label class="f" for="aMobile">Registered mobile</label><input class="t" id="aMobile" inputmode="tel" autocomplete="off"></div>
+    <div><label class="f" for="aEmail">Registered e-mail</label><input class="t" id="aEmail" inputmode="email" autocomplete="off" autocapitalize="off"></div>
+  </div>
+  <label class="f" for="aBal" id="aBalL">Balance &#8377; (optional)</label>
+  <input class="t" id="aBal" type="number" inputmode="decimal" step="0.01">
+  <label class="checkline"><input type="checkbox" id="aInNet" checked> Count this balance in "I own" and net worth</label>
+  <label class="f" for="aNotes">Notes</label>
+  <textarea class="t" id="aNotes" style="min-height:70px" placeholder="Linked UPI IDs, cheque book, locker, anything useful"></textarea>
+  <label class="checkline"><input type="checkbox" id="aClosed"> This account is closed</label>
+  <div class="btns"><button class="btn primary" id="aSave">Save</button><button class="btn" data-close>Cancel</button></div>
+  <div class="btns"><button class="btn danger block hidden" id="aDelete">Delete this account</button></div>
+</div>
+
 <!-- note editor -->
 <div class="sheet hidden" id="noteSheet" role="dialog" aria-modal="true">
   <div class="grab"></div>
@@ -479,7 +532,7 @@ nav.tabs button.on { color: var(--accent); }
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }
   function remote() { return !!(cfg.url && cfg.token); }
-  function emptyData() { return { entries: [], inbox: [], holdings: [], notes: [] }; }
+  function emptyData() { return { entries: [], inbox: [], holdings: [], notes: [], accounts: [] }; }
   function localData() {
     var d = load('ed2.local', null);
     if (d) return d;
@@ -490,12 +543,12 @@ nav.tabs button.on { color: var(--accent); }
     return d;
   }
   var D = remote() ? load('ed2.remote', emptyData()) : snapshot(localData());
-  function snapshot(d) { return { entries: d.entries, inbox: d.inbox.filter(function (x) { return x.status === 'new'; }), holdings: d.holdings, notes: d.notes || [] }; }
+  function snapshot(d) { return { entries: d.entries, inbox: d.inbox.filter(function (x) { return x.status === 'new'; }), holdings: d.holdings, notes: d.notes || [], accounts: d.accounts || [] }; }
 
   var ui = {
     tab: D.inbox.length ? 'confirm' : 'diary', view: 'month', y: new Date().getFullYear(), m: new Date().getMonth(),
     lastSync: load('ed.lastSync', null), refreshing: false, navigated: false,
-    sel: {}, edits: {}, searchType: '', sumFilter: '', catFilter: '', diaryKind: 'money', searchKind: 'money', note: null, showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
+    sel: {}, edits: {}, searchType: '', sumFilter: '', catFilter: '', diaryKind: 'money', searchKind: 'money', note: null, acct: null, acctGroup: 'bank', showClosed: false, modal: null, editing: null, editMode: null, type: 'expense', hold: null
   };
 
   /* ---------- this-browser store, used until the Sheet is connected ---------- */
@@ -525,18 +578,21 @@ nav.tabs button.on { color: var(--accent); }
     function op(o) {
       if (o.action === 'save') {
         if (!d.notes) d.notes = [];
-        var list = o.kind === 'entry' ? d.entries : o.kind === 'note' ? d.notes : d.holdings, it = Object.assign({}, o.item);
-        if (o.kind === 'entry') validateEntry(it); else if (o.kind === 'note') validateNote(it); else validateHolding(it);
+        if (!d.accounts) d.accounts = [];
+        var list = o.kind === 'entry' ? d.entries : o.kind === 'note' ? d.notes : o.kind === 'account' ? d.accounts : d.holdings, it = Object.assign({}, o.item);
+        if (o.kind === 'entry') validateEntry(it); else if (o.kind === 'note') validateNote(it);
+        else if (o.kind === 'account') { if (!String(it.name || it.institution || '').trim()) throw new Error('Please enter the bank or broker name.'); }
+        else validateHolding(it);
         var i = it.id ? list.findIndex(function (x) { return x.id === it.id; }) : -1;
         it.updated = now;
         if (i >= 0) list[i] = Object.assign({}, list[i], it);
         else {
           it.id = uid(); it.created = now;
-          if (o.kind === 'entry') { it.source = it.source || 'manual'; it.status = 'confirmed'; } else if (o.kind === 'holding') it.status = it.status || 'active';
+          if (o.kind === 'entry') { it.source = it.source || 'manual'; it.status = 'confirmed'; } else if (o.kind === 'holding' || o.kind === 'account') it.status = it.status || 'active';
           list.push(it);
         }
       } else if (o.action === 'delete') {
-        var k = o.kind === 'entry' ? 'entries' : o.kind === 'note' ? 'notes' : 'holdings';
+        var k = o.kind === 'entry' ? 'entries' : o.kind === 'note' ? 'notes' : o.kind === 'account' ? 'accounts' : 'holdings';
         if (!d[k]) d[k] = [];
         d[k] = d[k].filter(function (x) { return x.id !== o.id; });
       } else if (o.action === 'ingest') {
@@ -580,7 +636,7 @@ nav.tabs button.on { color: var(--accent); }
   }
   function apply(j) {
     if (j && j.entries) {
-      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], notes: j.notes || [], notesOk: !!j.notes,
+      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], notes: j.notes || [], notesOk: !!j.notes, accounts: j.accounts || [], accountsOk: !!j.accounts,
         sheetId: j.sheetId || D.sheetId || '', sheetUrl: j.sheetUrl || D.sheetUrl || '' };
       if (remote()) { store('ed2.remote', D); ui.lastSync = Date.now(); store('ed.lastSync', ui.lastSync); }
     }
@@ -1003,11 +1059,68 @@ nav.tabs button.on { color: var(--accent); }
       '<span class="vl">' + esc(coverOnly ? 'Sum assured (cover)' : num(h.current) !== null ? T.cur : T.amt) + '</span></div>' +
       (bits.length ? '<div class="ln">' + bits.join(' · ') + '</div>' : '') + '</button>';
   }
+  var ACCT_TYPES = { bank: ['Savings', 'Salary', 'Current', 'NRE', 'NRO', 'Joint', 'Other'], demat: ['Demat + Trading', 'Demat', 'Trading'] };
+  function lastDigits(v, n) { v = String(v || '').replace(/\s+/g, ''); return v ? '\u2022\u2022\u2022\u2022 ' + v.slice(-(n || 4)) : ''; }
+  function accountsHtml() {
+    var html = '<div class="sect"><h2>Bank &amp; demat accounts</h2><button class="add" id="addAcct">+ Add</button></div>';
+    if (remote() && D.accountsOk === false) {
+      return html + '<p class="muted" style="font-size:14px;margin:4px 2px">This needs a small update to your Google service (paste the latest code into your copy and publish a new version).</p>';
+    }
+    var list = (D.accounts || []).filter(function (a) { return ui.showClosed || a.status !== 'closed'; })
+      .sort(function (a, b) { return (a.status === 'closed') - (b.status === 'closed') || (a.group > b.group ? 1 : a.group < b.group ? -1 : 0) || String(a.institution).localeCompare(b.institution); });
+    if (!list.length) return html + '<p class="muted" style="font-size:14px;margin:4px 2px">Keep your account numbers, IFSC, customer IDs and demat details in one place.</p>';
+    return html + '<div class="hold-grid">' + list.map(function (a) {
+      var demat = a.group === 'demat', closed = a.status === 'closed';
+      var idLine = demat ? [a.dpId ? 'DP ' + a.dpId : '', a.clientId ? 'Client ' + lastDigits(a.clientId) : '', a.number ? 'BO ' + lastDigits(a.number) : ''].filter(Boolean).join(' \u00b7 ')
+        : [lastDigits(a.number), a.ifsc].filter(Boolean).join(' \u00b7 ');
+      return '<button class="hold acct' + (closed ? ' closed' : '') + '" data-aid="' + esc(a.id) + '">' +
+        '<div class="h1"><span class="nm">' + esc(a.name || a.institution) + '</span>' + (num(a.balance) !== null ? '<span class="val in">' + money(a.balance) + '</span>' : '') + '</div>' +
+        '<div class="h1"><span class="meta" style="margin:0"><span class="tag">' + esc(a.accType || (demat ? 'Demat' : 'Bank')) + '</span>' + esc(a.name ? a.institution : (a.holder || '')) + (closed ? ' \u00b7 closed' : '') + '</span>' +
+        (num(a.balance) !== null ? '<span class="vl">' + (demat ? 'Holdings value' : 'Balance') + (a.inNetWorth === 'no' ? ' (not counted)' : '') + '</span>' : '') + '</div>' +
+        (idLine ? '<div class="ln num">' + esc(idLine) + '</div>' : '') + '</button>';
+    }).join('') + '</div>';
+  }
+  function setAcctGroup(g) {
+    ui.acctGroup = g;
+    document.querySelectorAll('#aGroup button').forEach(function (b) { b.classList.toggle('on', b.dataset.g === g); });
+    $('aInstL').textContent = g === 'demat' ? 'Broker / depository participant' : 'Bank';
+    $('aInst').placeholder = g === 'demat' ? 'e.g. Zerodha, Geojit' : 'e.g. Federal Bank';
+    $('aNumL').textContent = g === 'demat' ? 'BO ID / demat account number' : 'Account number';
+    $('aBankOnly').classList.toggle('hidden', g === 'demat');
+    $('aDematOnly').classList.toggle('hidden', g !== 'demat');
+    $('aBalL').textContent = g === 'demat' ? 'Holdings value \u20b9 (optional)' : 'Balance \u20b9 (optional)';
+    var cur = $('aType').value;
+    $('aType').innerHTML = ACCT_TYPES[g].map(function (t) { return '<option' + (t === cur ? ' selected' : '') + '>' + t + '</option>'; }).join('');
+  }
+  function openAcct(a) {
+    ui.acct = a || null;
+    var x = a || { group: 'bank', inNetWorth: 'yes' };
+    $('aHead').textContent = a ? 'Edit account' : 'New account';
+    $('aType').innerHTML = '';
+    setAcctGroup(x.group === 'demat' ? 'demat' : 'bank');
+    if (x.accType) { if (ACCT_TYPES[ui.acctGroup].indexOf(x.accType) < 0) $('aType').insertAdjacentHTML('beforeend', '<option>' + esc(x.accType) + '</option>'); $('aType').value = x.accType; }
+    var map = { aInst: 'institution', aName: 'name', aHolder: 'holder', aNum: 'number', aIfsc: 'ifsc', aCust: 'customerId', aBranch: 'branch',
+      aDp: 'dpId', aClient: 'clientId', aNominee: 'nominee', aMobile: 'mobile', aEmail: 'email', aNotes: 'notes' };
+    Object.keys(map).forEach(function (id) { $(id).value = x[map[id]] || ''; });
+    $('aBal').value = num(x.balance) !== null ? x.balance : '';
+    $('aInNet').checked = x.inNetWorth !== 'no';
+    $('aClosed').checked = x.status === 'closed';
+    $('aDelete').classList.toggle('hidden', !a);
+    openModal('acctSheet');
+  }
+  function copyText(text, what) {
+    if (!text) { toast('Nothing to copy yet.'); return; }
+    var done = function () { toast((what || 'Text') + ' copied'); };
+    try { if (window.ExpenseAndroid && ExpenseAndroid.copyText && ExpenseAndroid.copyText(text)) { done(); return; } } catch (e) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { window.prompt('Copy:', text); });
+    else window.prompt('Copy:', text);
+  }
+
   function renderAssets() {
     var el = $('tab-assets'), all = D.holdings.slice();
-    if (!all.length) {
+    if (!all.length && !(D.accounts || []).length) {
       el.innerHTML = '<div class="empty">Keep track of what you own and what you owe.<small>Add insurance policies, chitties, deposits, gold, loans, credit cards and money lent or borrowed. Each one can show its next due date, and recording a payment adds it to your diary.</small></div>' +
-        '<div class="btns" style="max-width:360px;margin:0 auto"><button class="btn primary block" id="firstHold">Add your first item</button></div>';
+        '<div class="btns" style="max-width:360px;margin:0 auto"><button class="btn primary block" id="firstHold">Add your first item</button></div>' + accountsHtml();
       return;
     }
     var active = all.filter(function (h) { return h.status !== 'closed'; });
@@ -1018,6 +1131,8 @@ nav.tabs button.on { color: var(--accent); }
       if (h.type === 'Insurance') cover += num(h.amount) || 0;
       if (T.pay && !T.pay.income && num(h.installment) && FREQ[h.frequency]) monthly += h.installment / FREQ[h.frequency];
     });
+    var ownHold = own;
+    (D.accounts || []).forEach(function (a) { if (a.status !== 'closed' && a.inNetWorth !== 'no' && num(a.balance)) own += Number(a.balance); });
     var net = own - owe;
     var html = '<div class="summary"><div><small>I own</small><b class="in">' + money(own) + '</b></div>' +
       '<div><small>I owe</small><b class="out">' + money(owe) + '</b></div>' +
@@ -1044,10 +1159,10 @@ nav.tabs button.on { color: var(--accent); }
       return '<div class="sect"><h2>' + title + '</h2><span class="' + (side === 'asset' ? 'in' : 'out') + '">' + money(total) + '</span></div>' +
         (items.length ? '<div class="hold-grid">' + items.map(holdCard).join('') + '</div>' : '<p class="muted" style="font-size:14px;margin:4px 2px">Nothing recorded yet.</p>');
     }
-    html += section('asset', 'I own · to receive', own) + section('liability', 'I owe · to give', owe);
+    html += section('asset', 'I own · to receive', ownHold) + section('liability', 'I owe · to give', owe);
     var closedCount = all.length - active.length;
     if (closedCount) html += '<button class="linkbtn" id="toggleClosed">' + (ui.showClosed ? 'Hide' : 'Show') + ' ' + closedCount + ' closed item' + (closedCount > 1 ? 's' : '') + '</button>';
-    el.innerHTML = html;
+    el.innerHTML = html + accountsHtml();
   }
 
   /* ---------- page switching ---------- */
@@ -1270,6 +1385,11 @@ nav.tabs button.on { color: var(--accent); }
       return;
     }
     if (t.id === 'toggleClosed') { ui.showClosed = !ui.showClosed; renderAssets(); return; }
+    if (t.id === 'addAcct') {
+      if (remote() && D.accountsOk === false) { toast('This needs the service update first.'); return; }
+      openAcct(null); return;
+    }
+    if ((x = t.closest('[data-aid]'))) { var ac = (D.accounts || []).find(function (i) { return i.id === x.dataset.aid; }); if (ac) openAcct(ac); return; }
     if (t.id === 'firstHold') { openHolding(null); return; }
     if (t.id === 'allowSms') { try { AND.requestSmsPermission(); } catch (e) {} return; }
     if (t.id === 'openGuide') { location.href = GUIDE_URL; return; }
@@ -1331,6 +1451,27 @@ nav.tabs button.on { color: var(--accent); }
       closeModal(); toast(addExp ? 'Note saved and added to expenses' : 'Note saved');
       if (!ui.note && ui.view === 'month') { var d = n.date.split('-'); ui.y = +d[0]; ui.m = +d[1] - 1; render(); }
     }).catch(function () {});
+  };
+  $('aGroup').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) setAcctGroup(b.dataset.g); });
+  document.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.onclick = function () { copyText($(b.dataset.copy).value.trim(), b.dataset.copy === 'aIfsc' ? 'IFSC' : 'Number'); };
+  });
+  $('aSave').onclick = function () {
+    var g = ui.acctGroup, a = {
+      group: g, institution: $('aInst').value.trim(), name: $('aName').value.trim(), accType: $('aType').value, holder: $('aHolder').value.trim(),
+      number: $('aNum').value.replace(/\s+/g, ''), ifsc: g === 'bank' ? $('aIfsc').value.trim().toUpperCase() : '', customerId: g === 'bank' ? $('aCust').value.trim() : '',
+      branch: g === 'bank' ? $('aBranch').value.trim() : '', dpId: g === 'demat' ? $('aDp').value.trim().toUpperCase() : '', clientId: g === 'demat' ? $('aClient').value.trim() : '',
+      nominee: $('aNominee').value.trim(), mobile: $('aMobile').value.trim(), email: $('aEmail').value.trim(),
+      balance: $('aBal').value === '' ? '' : Number($('aBal').value), inNetWorth: $('aInNet').checked ? 'yes' : 'no',
+      status: $('aClosed').checked ? 'closed' : 'active', notes: $('aNotes').value.trim()
+    };
+    if (!a.institution && !a.name) { toast('Please enter the bank or broker name.'); $('aInst').focus(); return; }
+    if (ui.acct) a.id = ui.acct.id;
+    busy(this, act('save', { kind: 'account', item: a })).then(function () { closeModal(); toast('Saved'); }).catch(function () {});
+  };
+  $('aDelete').onclick = function () {
+    if (!ui.acct || !confirm('Delete this account record? This cannot be undone.')) return;
+    busy(this, act('delete', { kind: 'account', id: ui.acct.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
   };
   $('nDelete').onclick = function () {
     if (!ui.note || !confirm('Delete this note? This cannot be undone.')) return;
