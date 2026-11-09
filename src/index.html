@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src https://script.google.com https://script.googleusercontent.com https://raw.githubusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -185,6 +185,9 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); m
 .copyrow { display: flex; gap: 8px; align-items: center; }
 .copyrow input { flex: 1; }
 #aGroup button.on { background: var(--ink); color: var(--paper); }
+#updateCard { scroll-margin-top: 90px; }
+.steps { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 10px; }
+.steps .btn { width: 100%; }
 .copybtn { flex: none; min-height: 44px; border-radius: 10px; border: 1px solid var(--rule); background: var(--page); padding: 0 12px; font-size: 13px; color: var(--ink-2); }
 
 /* navigation */
@@ -298,6 +301,18 @@ nav.tabs button.on { color: var(--accent); }
       <input class="t" id="cfgToken" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="btns"><button class="btn primary" id="saveCfg">Save and connect</button><button class="btn" id="scanBtn">Check for new transactions</button></div>
       <div class="btns"><button class="btn block hidden" id="uploadLocal">Copy data kept in this browser to the Sheet</button></div>
+    </div>
+    <div class="card hidden" id="updateCard" style="border:2px solid var(--accent)">
+      <h3>Update your Google service</h3>
+      <p>New sections (Notes, Bank &amp; demat accounts, Sheet links) need the latest code in your Google service. It takes about five minutes, once. Your records stay as they are.</p>
+      <ol class="steps">
+        <li><button class="btn primary" id="updCopy">1. Copy the new code</button></li>
+        <li><a class="btn" id="updOpen" href="https://script.google.com/home" target="_blank" rel="noopener">2. Open my Apps Script</a>
+          <p class="hint">If the page looks cramped, tap Chrome&rsquo;s &#8942; menu and tick <b>Desktop site</b>. Open your project (usually &ldquo;Copy of Expense Diary - make your own copy&rdquo;) and tap <b>Code.gs</b>.</p></li>
+        <li><p class="hint" style="margin-top:0"><b>3. Replace the code.</b> Press and hold inside the code, tap <b>Select all</b>, then press and hold again and tap <b>Paste</b>. Tap the <b>Save</b> icon (a small disk) at the top.</p></li>
+        <li><p class="hint" style="margin-top:0"><b>4. Publish it.</b> Tap <b>Deploy</b> &rarr; <b>Manage deployments</b> &rarr; the <b>pencil</b> icon &rarr; under Version choose <b>New version</b> &rarr; <b>Deploy</b>.</p></li>
+        <li><button class="btn" id="updCheck">5. Check the update</button></li>
+      </ol>
     </div>
     <div class="card hidden" id="sheetCard">
       <h3>Your Google Sheet</h3>
@@ -943,7 +958,7 @@ nav.tabs button.on { color: var(--accent); }
   }
   function renderNotes(el) {
     if (remote() && D.notesOk === false) {
-      el.innerHTML = '<div class="card"><h3>Notes need a small update</h3><p>Your Google service was set up before Notes existed. Paste the latest code into your copy of the service and choose Deploy, then Manage deployments, then New version. Your money diary keeps working as before in the meantime.</p></div>';
+      el.innerHTML = '<div class="card"><h3>Notes need a small update</h3><p>Your Google service was set up before Notes existed. Your money diary keeps working as before in the meantime.</p><div class="btns"><button class="btn primary" data-goupdate="1">Show me how to update</button></div></div>';
       return;
     }
     var all = notesList(), html = '';
@@ -1068,7 +1083,7 @@ nav.tabs button.on { color: var(--accent); }
   function accountsHtml() {
     var html = '<div class="sect"><h2>Bank &amp; demat accounts</h2><button class="add" id="addAcct">+ Add</button></div>';
     if (remote() && D.accountsOk === false) {
-      return html + '<p class="muted" style="font-size:14px;margin:4px 2px">This needs a small update to your Google service (paste the latest code into your copy and publish a new version).</p>';
+      return html + '<p class="muted" style="font-size:14px;margin:4px 2px">This needs a small update to your Google service.</p><div class="btns" style="margin-top:6px"><button class="btn" data-goupdate="1">Show me how to update</button></div>';
     }
     var list = (D.accounts || []).filter(function (a) { return ui.showClosed || a.status !== 'closed'; })
       .sort(function (a, b) { return (a.status === 'closed') - (b.status === 'closed') || (a.group > b.group ? 1 : a.group < b.group ? -1 : 0) || String(a.institution).localeCompare(b.institution); });
@@ -1174,6 +1189,9 @@ nav.tabs button.on { color: var(--accent); }
   function render() {
     $('modeNote').classList.toggle('hidden', remote());
     $('uploadLocal').classList.toggle('hidden', !(remote() && hasLocalData()));
+    var needsUpdate = remote() && (D.notesOk === false || D.accountsOk === false);
+    $('updateCard').classList.toggle('hidden', !needsUpdate);
+    if (needsUpdate && window.__prefetchCode) window.__prefetchCode();
     var hasSheet = remote() && !!D.sheetId;
     $('sheetCard').classList.toggle('hidden', !hasSheet);
     if (hasSheet) {
@@ -1352,6 +1370,11 @@ nav.tabs button.on { color: var(--accent); }
   mainEl.addEventListener('click', function (ev) {
     var t = ev.target, x;
     if ((x = t.closest('[data-open]'))) { var it = D.inbox.find(function (i) { return i.id === x.dataset.open; }); if (it) openEntry(it, 'inbox'); return; }
+    if (t.closest('[data-goupdate]')) {
+      go('settings');
+      setTimeout(function () { var c = $('updateCard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150);
+      return;
+    }
     if ((x = t.closest('[data-kind]'))) { ui.diaryKind = x.dataset.kind; clearFilters(); renderDiary(); render(); return; }
     if ((x = t.closest('[data-nid]'))) { var nn = notesList().find(function (i) { return i.id === x.dataset.nid; }); if (nn) openNote(nn); return; }
     if ((x = t.closest('[data-sum]'))) {
@@ -1454,6 +1477,28 @@ nav.tabs button.on { color: var(--accent); }
     busy(this, act('batch', { ops: ops })).then(function () {
       closeModal(); toast(addExp ? 'Note saved and added to expenses' : 'Note saved');
       if (!ui.note && ui.view === 'month') { var d = n.date.split('-'); ui.y = +d[0]; ui.m = +d[1] - 1; render(); }
+    }).catch(function () {});
+  };
+  // The code is fetched in advance so that copying happens right on the tap (iPhones require that).
+  var latestCode = '';
+  function prefetchCode() {
+    if (latestCode) return Promise.resolve(latestCode);
+    return fetch('https://raw.githubusercontent.com/aj9236/Expense-Diary/main/google-apps-script/Code.gs?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (c) { if (c.indexOf('function doPost') >= 0) latestCode = c; return latestCode; })
+      .catch(function () { return ''; });
+  }
+  window.__prefetchCode = prefetchCode;
+  $('updCopy').onclick = function () {
+    if (latestCode) { copyText(latestCode, 'New code'); return; }
+    toast('Getting the new code…');
+    prefetchCode().then(function (c) { toast(c ? 'Ready. Tap “Copy the new code” again.' : 'Could not get the new code. Check the internet connection.'); });
+  };
+  $('updCheck').onclick = function () {
+    var btn = this;
+    busy(btn, call('refresh', {})).then(function (j) {
+      apply(j);
+      toast(j.notes && j.accounts ? 'Your service is up to date.' : 'Not updated yet. Please check steps 3 and 4.');
     }).catch(function () {});
   };
   $('aGroup').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) setAcctGroup(b.dataset.g); });
