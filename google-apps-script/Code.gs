@@ -268,20 +268,23 @@ var KINDS = {
     'mode', 'ref', 'balance', 'source', 'status', 'msgId', 'entryId', 'raw', 'received', 'updated'] },
   account: { sheet: 'Accounts', headers: ['id', 'group', 'name', 'institution', 'accType', 'holder', 'number', 'ifsc', 'branch', 'customerId',
     'dpId', 'clientId', 'nominee', 'mobile', 'email', 'balance', 'inNetWorth', 'status', 'notes', 'created', 'updated'] },
-  note: { sheet: 'Notes', headers: ['id', 'date', 'time', 'title', 'details', 'label', 'amount', 'remind', 'created', 'updated'] },
+  note: { sheet: 'Notes', headers: ['id', 'date', 'time', 'title', 'details', 'label', 'amount', 'remind', 'created', 'updated', 'alert'] },
   holding: { sheet: 'Holdings', headers: ['id', 'side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment',
-    'frequency', 'start', 'end', 'nextDue', 'status', 'notes', 'created', 'updated'] }
+    'frequency', 'start', 'end', 'nextDue', 'status', 'notes', 'created', 'updated', 'alert'] }
 };
 var NUMERIC = { amount: 1, balance: 1, current: 1, rate: 1, installment: 1 };
 var DATE_KEYS = { date: 1, start: 1, end: 1, nextDue: 1, remind: 1 };
-var NOTE_FIELDS = ['date', 'time', 'title', 'details', 'label', 'amount', 'remind'];
+var NOTE_FIELDS = ['date', 'time', 'title', 'details', 'label', 'amount', 'remind', 'alert'];
 var ACCOUNT_FIELDS = ['group', 'name', 'institution', 'accType', 'holder', 'number', 'ifsc', 'branch', 'customerId', 'dpId', 'clientId',
   'nominee', 'mobile', 'email', 'balance', 'inNetWorth', 'status', 'notes'];
 var ENTRY_FIELDS = ['date', 'time', 'type', 'amount', 'category', 'description', 'party', 'account', 'bank', 'mode', 'ref', 'balance', 'source', 'raw', 'note'];
-var HOLDING_FIELDS = ['side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment', 'frequency', 'start', 'end', 'nextDue', 'status', 'notes'];
+var HOLDING_FIELDS = ['side', 'type', 'name', 'party', 'ref', 'amount', 'current', 'rate', 'installment', 'frequency', 'start', 'end', 'nextDue', 'status', 'notes', 'alert'];
 var PROCESSED_LABEL = 'ExpenseDiary-Processed';
 var DEFAULT_GMAIL_QUERY = '(from:hdfcbank.net OR from:hdfcbank.bank.in OR from:federalbank.co.in OR from:federal.bank.in) (debited OR credited OR spent) newer_than:7d';
 var SCAN_GAP_MS = 60 * 1000;
+var REMIND_DAYS = 7;      // e-mail reminders start this many days before a due date
+var REMIND_HOUR = 8;      // and are sent once a day, after this hour
+var APP_URL = 'https://aj9236.github.io/Expense-Diary/';
 
 /* ---------- setup ---------- */
 function setup() {
@@ -316,8 +319,79 @@ function newKey_() { return Utilities.getUuid().replace(/-/g, '').slice(0, 24); 
 function scheduledScan() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return;
-  try { scanGmail_(); } finally { lock.releaseLock(); }
+  try {
+    try { scanGmail_(); } catch (e) { Logger.log('Scan failed: ' + e); }
+    try { dailyReminders_(false); } catch (e) { Logger.log('Reminder failed: ' + e); }
+  } finally { lock.releaseLock(); }
 }
+
+/* ---------- due-date reminders ----------
+   Once a day, an e-mail to you lists every open item whose due date is within the next week.
+   An item stops appearing when it is closed, when its date has passed, or when its reminder is switched off. */
+function todayInfo_() {
+  var tz = Session.getScriptTimeZone() || 'Asia/Kolkata', now = new Date();
+  return { day: Utilities.formatDate(now, tz, 'yyyy-MM-dd'), hour: Number(Utilities.formatDate(now, tz, 'H')) };
+}
+function daysBetween_(fromIso, toIso) {
+  var a = String(fromIso).split('-'), b = String(toIso).split('-');
+  return Math.round((Date.UTC(+b[0], +b[1] - 1, +b[2]) - Date.UTC(+a[0], +a[1] - 1, +a[2])) / 86400000);
+}
+function dueReminders_(day) {
+  var out = [];
+  function add(kind, item, label, when, amount) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(when || ''))) return;
+    var d = daysBetween_(day, when);
+    if (d < 0 || d > REMIND_DAYS) return;
+    out.push({ kind: kind, id: item.id, name: item.name || item.title || 'Item', type: item.type || item.label || '', party: item.party || '',
+      ref: item.ref || '', label: label, date: String(when), days: d, amount: amount });
+  }
+  readAll_('holding').forEach(function (h) {
+    if (h.status === 'closed' || h.alert === 'off') return;
+    add('holding', h, 'Due', h.nextDue, toNum_(h.installment));
+    if (h.end && h.end !== h.nextDue) add('holding', h, h.side === 'liability' ? 'Ends' : 'Matures', h.end, toNum_(h.current) || toNum_(h.amount));
+  });
+  readAll_('note').forEach(function (n) {
+    if (n.alert === 'off') return;
+    add('note', n, 'Reminder', n.remind, toNum_(n.amount));
+  });
+  return out.sort(function (a, b) { return a.days - b.days || String(a.name).localeCompare(b.name); });
+}
+function rupees_(n) {
+  if (!n) return '';
+  var s = String(Math.round(n)), last = s.slice(-3), rest = s.slice(0, -3);
+  return '\u20b9' + (rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last : last);
+}
+function dmy_(iso) { var p = String(iso).split('-'); return p[2] + '-' + p[1] + '-' + p[0]; }
+function dailyReminders_(force) {
+  var props = PropertiesService.getScriptProperties(), t = todayInfo_();
+  if (!force && (props.getProperty('REMIND_DAY') === t.day || t.hour < REMIND_HOUR)) return null;
+  props.setProperty('REMIND_DAY', t.day);
+  var list = dueReminders_(t.day);
+  if (!list.length) return { sent: false, count: 0 };
+  var when = function (d) { return d === 0 ? 'TODAY' : d === 1 ? 'tomorrow' : 'in ' + d + ' days'; };
+  var esc = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+  var lines = list.map(function (r) {
+    return '- ' + r.name + (r.party ? ' (' + r.party + (r.ref ? ' ' + r.ref : '') + ')' : '') + ': ' + r.label.toLowerCase() + ' ' + dmy_(r.date) +
+      ' - ' + when(r.days) + (r.amount ? ' - ' + rupees_(r.amount) : '');
+  });
+  var rows = list.map(function (r) {
+    return '<tr><td style="padding:8px 10px;border-bottom:1px solid #e6dccb"><b>' + esc(r.name) + '</b><br><span style="color:#6d6558">' +
+      esc([r.type, r.party, r.ref].filter(Boolean).join(' \u00b7 ')) + '</span></td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid #e6dccb;white-space:nowrap">' + r.label + ' ' + dmy_(r.date) + '<br><b style="color:' + (r.days <= 1 ? '#a3341f' : '#2a2620') + '">' + when(r.days) + '</b></td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid #e6dccb;text-align:right;white-space:nowrap">' + (r.amount ? rupees_(r.amount) : '') + '</td></tr>';
+  }).join('');
+  var subject = 'Reminder: ' + list[0].name + ' ' + list[0].label.toLowerCase() + ' ' + when(list[0].days) + (list.length > 1 ? ' + ' + (list.length - 1) + ' more' : '');
+  var html = '<div style="font-family:-apple-system,Roboto,Segoe UI,sans-serif;color:#2a2620;max-width:600px">' +
+    '<h2 style="font-family:Georgia,serif;font-weight:normal">Coming up in the next ' + REMIND_DAYS + ' days</h2>' +
+    '<table style="border-collapse:collapse;width:100%;font-size:14px">' + rows + '</table>' +
+    '<p style="font-size:13px;color:#6d6558">You will get this reminder every day until the date passes. To stop it for one item, open the item in <a href="' + APP_URL + '">Expense Diary</a> and untick "Remind me", or mark it closed.</p></div>';
+  GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), subject,
+    'Coming up in the next ' + REMIND_DAYS + ' days:\n\n' + lines.join('\n') + '\n\nTo stop a reminder, open the item in Expense Diary (' + APP_URL + ') and untick "Remind me", or mark it closed.',
+    { htmlBody: html, name: 'Expense Diary' });
+  return { sent: true, count: list.length };
+}
+/* Run this from the editor to receive today's reminder e-mail straight away. */
+function sendRemindersNow() { Logger.log(JSON.stringify(dailyReminders_(true))); }
 
 /* ---------- web endpoints ---------- */
 function doGet(e) {
@@ -405,6 +479,7 @@ function handle_(b) {
     case 'delete': remove_(b.kind, b.id); return withSnapshot_({});
     case 'batch': (b.ops || []).forEach(runOp_); return withSnapshot_({});
     case 'reparse': return withSnapshot_({ reparsed: reparseInbox_() });
+    case 'remindnow': return { reminder: dailyReminders_(true) || { sent: false, count: 0 } };
     default: throw new Error('Unknown action.');
   }
 }
@@ -424,7 +499,7 @@ function withSnapshot_(o) {
   o.holdings = readAll_('holding');
   o.notes = readAll_('note');
   o.accounts = readAll_('account');
-  o.features = ['notes', 'accounts'];
+  o.features = ['notes', 'accounts', 'reminders'];
   o.lastScan = Number(PropertiesService.getScriptProperties().getProperty('LAST_SCAN') || 0);
   try { var book = ss_(); o.sheetId = book.getId(); o.sheetUrl = book.getUrl(); } catch (e) { }
   return o;

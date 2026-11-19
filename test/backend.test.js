@@ -10,7 +10,7 @@ const v1 = [V1H,
 const g = load(CODE, { presetSheets: [['Entries', v1]] });
 g.ctx.setup();
 const T = g.props.TOKEN;
-const P = b => g.post(Object.assign({ token: T }, b));
+const P = b => g.post(Object.assign({ token: g.props.TOKEN }, b));
 
 ok(g.post({ action: 'refresh', token: 'bad' }).ok === false, 'wrong access key rejected');
 let s = P({ action: 'refresh' });
@@ -94,6 +94,24 @@ g.ctx.resetAccessKey();
 page = g.ctx.doGet({ parameter: { connect: '' } }).html;
 ok(page.indexOf(encodeURIComponent(g.props.TOKEN)) > 0 && g.props.TOKEN !== T, 'resetAccessKey issues a new key and allows connecting again');
 ok(typeof g.ctx.doGet({ parameter: {} }) === 'string', 'plain status check still works');
+
+// Due-date reminders
+const iso = n => { const d = new Date(Date.now() + 330 * 60000 + n * 86400000); return d.toISOString().slice(0, 10); };
+P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Gold loan', name: 'Gold Loan', party: 'KSFE', ref: '53859', amount: 739500, nextDue: iso(3), end: iso(4) } });
+P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Gold loan', name: 'Muted loan', amount: 1000, nextDue: iso(2), alert: 'off' } });
+P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Gold loan', name: 'Closed loan', amount: 1000, nextDue: iso(1), status: 'closed' } });
+P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Gold loan', name: 'Far loan', amount: 1000, nextDue: iso(9) } });
+P({ action: 'save', kind: 'holding', item: { side: 'liability', type: 'Gold loan', name: 'Past loan', amount: 1000, nextDue: iso(-1) } });
+s = P({ action: 'save', kind: 'note', item: { date: iso(0), title: 'Car insurance renewal', remind: iso(0) } });
+ok(s.features.indexOf('reminders') >= 0 && s.holdings.some(h => h.alert === 'off'), 'reminder switch is stored');
+let due = g.ctx.dueReminders_(iso(0)).map(r => r.name + ':' + r.label + ':' + r.days);
+ok(JSON.stringify(due) === JSON.stringify(['Car insurance renewal:Reminder:0', 'Gold Loan:Due:3', 'Gold Loan:Ends:4']), 'only open, switched-on items due within a week: ' + due.join(', '));
+let rr = P({ action: 'remindnow' });
+ok(rr.reminder.sent && g.sent.length === 1 && g.sent[0].to === 'owner@example.com' && /^Reminder: Car insurance renewal reminder TODAY \+ 2 more$/.test(g.sent[0].subject) && /KSFE 53859/.test(g.sent[0].body) && /7,39,500/.test(g.sent[0].html), 'reminder e-mail sent to the owner: ' + g.sent[0].subject);
+g.ctx.scheduledScan();
+ok(g.sent.length === 1, 'scheduled run sends at most one reminder a day');
+g.props.REMIND_DAY = '2000-01-01'; g.ctx.scheduledScan();
+ok(g.sent.length === (Number(g.ctx.todayInfo_().hour) >= 8 ? 2 : 1), 'next day it is sent again (after 8 am)');
 
 console.log(fail ? fail + ' FAILED' : '\nAll back-end checks passed');
 process.exit(fail ? 1 : 0);

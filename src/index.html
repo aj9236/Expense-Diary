@@ -40,6 +40,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
 .in { color: var(--in); } .out { color: var(--out); } .muted { color: var(--ink-3); }
+.shareimg { display: block; width: 100%; max-width: 480px; margin: 4px auto 6px; border-radius: 14px; box-shadow: 0 1px 2px rgba(60,40,20,.12), 0 8px 24px rgba(60,40,20,.10); }
+.remindline small.rhint { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.remindline small.rhint:empty { display: none; }
 
 header.top { position: sticky; top: 0; z-index: 5; background: var(--paper); padding: calc(10px + var(--safe-t)) 16px 8px; border-bottom: 1px solid var(--rule); }
 .wrap { max-width: 880px; margin: 0 auto; }
@@ -304,13 +307,13 @@ nav.tabs button.on { color: var(--accent); }
     </div>
     <div class="card hidden" id="updateCard" style="border:2px solid var(--accent)">
       <h3>Update your Google service</h3>
-      <p>New sections (Notes, Bank &amp; demat accounts, Sheet links) need the latest code in your Google service. It takes about five minutes, once. Your records stay as they are.</p>
+      <p>New features (daily e-mail reminders for due dates, Notes, Bank &amp; demat accounts) need the latest code in your Google service. It takes about five minutes, once. Your records stay as they are.</p>
       <ol class="steps">
         <li><button class="btn primary" id="updCopy">1. Copy the new code</button></li>
         <li><a class="btn" id="updOpen" href="https://script.google.com/home" target="_blank" rel="noopener">2. Open my Apps Script</a>
           <p class="hint">If the page looks cramped, tap Chrome&rsquo;s &#8942; menu and tick <b>Desktop site</b>. Open your project (usually &ldquo;Copy of Expense Diary - make your own copy&rdquo;) and tap <b>Code.gs</b>.</p></li>
         <li><p class="hint" style="margin-top:0"><b>3. Replace the code.</b> Press and hold inside the code, tap <b>Select all</b>, then press and hold again and tap <b>Paste</b>. Tap the <b>Save</b> icon (a small disk) at the top.</p></li>
-        <li><p class="hint" style="margin-top:0"><b>4. Publish it.</b> Tap <b>Deploy</b> &rarr; <b>Manage deployments</b> &rarr; the <b>pencil</b> icon &rarr; under Version choose <b>New version</b> &rarr; <b>Deploy</b>.</p></li>
+        <li><p class="hint" style="margin-top:0"><b>4. Publish it.</b> Tap <b>Deploy</b> &rarr; <b>Manage deployments</b> &rarr; the <b>pencil</b> icon &rarr; under Version choose <b>New version</b> &rarr; <b>Deploy</b>. If Google asks for permission, allow it as you did at setup (it is needed to e-mail reminders to you).</p></li>
         <li><button class="btn" id="updCheck">5. Check the update</button></li>
       </ol>
     </div>
@@ -372,6 +375,7 @@ nav.tabs button.on { color: var(--accent); }
   <div class="btns">
     <button class="btn primary" id="eSave">Save</button>
     <button class="btn" data-close>Cancel</button>
+    <button class="btn hidden" id="eShare" data-share="entry">Share</button>
   </div>
   <div class="btns"><button class="btn danger block hidden" id="eDanger"></button></div>
 </div>
@@ -407,11 +411,13 @@ nav.tabs button.on { color: var(--accent); }
   </div>
   <label class="f" for="hNotes">Notes</label>
   <textarea class="t" id="hNotes" style="min-height:70px" placeholder="Nominee, branch, contact, anything useful"></textarea>
+  <label class="checkline remindline"><input type="checkbox" id="hAlert" checked> <span>Remind me every day from a week before the due date<small class="rhint"></small></span></label>
   <label class="checkline"><input type="checkbox" id="hClosed"> This is closed or fully settled</label>
   <p class="hint" id="hHint"></p>
   <div class="btns">
     <button class="btn primary" id="hSave">Save</button>
     <button class="btn" data-close>Cancel</button>
+    <button class="btn hidden" id="hShare" data-share="holding">Share</button>
   </div>
   <div class="paybox hidden" id="payBox">
     <h3 id="payTitle">Record a payment</h3>
@@ -466,7 +472,7 @@ nav.tabs button.on { color: var(--accent); }
   <label class="f" for="aNotes">Notes</label>
   <textarea class="t" id="aNotes" style="min-height:70px" placeholder="Linked UPI IDs, cheque book, locker, anything useful"></textarea>
   <label class="checkline"><input type="checkbox" id="aClosed"> This account is closed</label>
-  <div class="btns"><button class="btn primary" id="aSave">Save</button><button class="btn" data-close>Cancel</button></div>
+  <div class="btns"><button class="btn primary" id="aSave">Save</button><button class="btn" data-close>Cancel</button><button class="btn hidden" id="aShare" data-share="account">Share</button></div>
   <div class="btns"><button class="btn danger block hidden" id="aDelete">Delete this account</button></div>
 </div>
 
@@ -488,12 +494,28 @@ nav.tabs button.on { color: var(--accent); }
     <div><label class="f" for="nAmount">Amount &#8377; (optional)</label><input class="t" id="nAmount" type="number" inputmode="decimal" step="0.01"></div>
     <div><label class="f" for="nRemind">Remind me on (optional)</label><input class="t" id="nRemind" type="date"></div>
   </div>
+  <label class="checkline remindline"><input type="checkbox" id="nAlert" checked> <span>Remind me every day from a week before this date<small class="rhint"></small></span></label>
   <label class="checkline" id="nExpWrap"><input type="checkbox" id="nExpense"> Also add this amount to my expenses</label>
   <div class="btns">
     <button class="btn primary" id="nSave">Save</button>
     <button class="btn" data-close>Cancel</button>
+    <button class="btn hidden" id="nShare" data-share="note">Share</button>
   </div>
   <div class="btns"><button class="btn danger block hidden" id="nDelete">Delete note</button></div>
+</div>
+
+<!-- share one item -->
+<div class="sheet hidden" id="shareSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2>Share</h2>
+  <img class="shareimg" id="shareImg" alt="Item details">
+  <div class="btns" id="shareBtns">
+    <button class="btn primary hidden" id="shImg">Share image</button>
+    <button class="btn hidden" id="shCopyImg">Copy image</button>
+    <button class="btn" id="shCopyTxt">Copy text</button>
+  </div>
+  <p class="hint" id="shHint"></p>
+  <div class="btns"><button class="btn" data-close>Close</button></div>
 </div>
 
 <div class="toast" id="toast" role="status"></div>
@@ -655,7 +677,7 @@ nav.tabs button.on { color: var(--accent); }
   }
   function apply(j) {
     if (j && j.entries) {
-      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], notes: j.notes || [], notesOk: !!j.notes, accounts: j.accounts || [], accountsOk: !!j.accounts,
+      D = { entries: j.entries || [], inbox: j.inbox || [], holdings: j.holdings || [], notes: j.notes || [], notesOk: !!j.notes, accounts: j.accounts || [], accountsOk: !!j.accounts, remindOk: (j.features || []).indexOf('reminders') >= 0,
         sheetId: j.sheetId || D.sheetId || '', sheetUrl: j.sheetUrl || D.sheetUrl || '' };
       if (remote()) { store('ed2.remote', D); ui.lastSync = Date.now(); store('ed.lastSync', ui.lastSync); }
     }
@@ -973,7 +995,7 @@ nav.tabs button.on { color: var(--accent); }
   function renderDiary() {
     var el = $('tab-diary');
     if (ui.diaryKind === 'notes') { $('periodLabel').textContent = ui.view === 'month' ? MONTHS[ui.m] + ' ' + ui.y : String(ui.y); renderNotes(el); }
-    else renderMoney(el);
+    else { renderMoney(el); el.insertAdjacentHTML('afterbegin', dueWeekHtml()); }
     el.insertAdjacentHTML('afterbegin', '<div class="kindseg"><div class="seg" id="kindSeg">' +
       '<button data-kind="money" class="' + (ui.diaryKind === 'money' ? 'on' : '') + '">Money</button>' +
       '<button data-kind="notes" class="' + (ui.diaryKind === 'notes' ? 'on' : '') + '">Notes</button></div></div>');
@@ -1065,7 +1087,8 @@ nav.tabs button.on { color: var(--accent); }
       return '<option' + (l === x.label ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('');
     $('nAmount').value = num(x.amount) !== null ? x.amount : ''; $('nRemind').value = x.remind || '';
     $('nExpense').checked = false; $('nExpWrap').classList.toggle('hidden', !!n);
-    $('nDelete').classList.toggle('hidden', !n);
+    $('nDelete').classList.toggle('hidden', !n); $('nShare').classList.toggle('hidden', !n);
+    $('nAlert').checked = x.alert !== 'off'; remindHint();
     openModal('noteSheet');
     if (!n) setTimeout(function () { $('nTitle').focus(); }, 280);
   }
@@ -1134,6 +1157,171 @@ nav.tabs button.on { color: var(--accent); }
       (list.length ? dayGroupsHtml(list) : '<div class="empty">No matching entries.</div>');
   }
 
+  /* ---------- due-date reminders ---------- */
+  // Items whose date falls within the next week. The Google service e-mails the same list once a day.
+  function alertOk() { return !remote() || D.remindOk === true; }
+  function remindHint() {
+    var t = !remote() ? 'Shown at the top of your diary. Connect your Google Sheet to also get it by e-mail.'
+      : D.remindOk ? 'Shown at the top of your diary and sent to your Gmail each morning. Stops once the date passes or the item is closed.' : '';
+    document.querySelectorAll('.remindline').forEach(function (l) { l.classList.toggle('hidden', !alertOk()); l.querySelector('.rhint').textContent = t; });
+  }
+  function dueWeek() {
+    var out = [];
+    function add(kind, x, label, when, amt) {
+      if (!when) return; var d = daysFromToday(when);
+      if (d >= 0 && d <= 7) out.push({ kind: kind, x: x, label: label, date: when, d: d, amt: amt });
+    }
+    (D.holdings || []).forEach(function (h) {
+      if (h.status === 'closed' || h.alert === 'off') return;
+      add('holding', h, 'Due', h.nextDue, num(h.installment));
+      if (h.end && h.end !== h.nextDue) add('holding', h, typeOf(h).end ? (h.side === 'liability' ? 'Ends' : 'Matures') : 'Ends', h.end, null);
+    });
+    (D.notes || []).forEach(function (n) { if (n.alert !== 'off') add('note', n, 'Reminder', n.remind, num(n.amount)); });
+    return out.sort(function (a, b) { return a.d - b.d; });
+  }
+  function dueWeekHtml() {
+    var list = dueWeek(); if (!list.length) return '';
+    return '<div class="dues" style="margin-bottom:14px"><h3>Due this week</h3>' + list.map(function (r) {
+      var w = r.d === 0 ? 'Today' : r.d === 1 ? 'Tomorrow' : 'In ' + r.d + ' days';
+      return '<button class="due" data-' + (r.kind === 'note' ? 'nid' : 'hid') + '="' + esc(r.x.id) + '"><span>' + esc(r.x.name || r.x.title || 'Note') +
+        ' <span class="muted">' + esc(r.label.toLowerCase()) + '</span></span><span class="a out">' + (r.amt ? money(r.amt) : '') + '</span>' +
+        '<span class="w' + (r.d <= 1 ? ' late' : '') + '">' + dmy(r.date) + ' \u00b7 ' + w + '</span></button>';
+    }).join('') + '</div>';
+  }
+
+  /* ---------- share one item as a picture or text ---------- */
+  function shareData(kind, x) {
+    var rows = [], add = function (k, v) { if (v !== undefined && v !== null && String(v).trim() !== '') rows.push([k, String(v)]); };
+    var d = { rows: rows, title: '', sub: '', amount: null, amtLabel: '', tone: '' };
+    if (kind === 'holding') {
+      var T = typeOf(x), coverOnly = x.type === 'Insurance' && num(x.current) === null && num(x.amount) !== null;
+      d.title = x.name; d.sub = x.type + (x.status === 'closed' ? ' \u00b7 closed' : '');
+      d.amount = coverOnly ? num(x.amount) : holdValue(x); d.amtLabel = coverOnly ? 'Sum assured (cover)' : num(x.current) !== null ? T.cur : T.amt;
+      d.tone = coverOnly ? '' : x.side === 'liability' ? 'out' : 'in';
+      add(T.party || 'Bank / company / person', x.party); add('Policy / account no.', x.ref);
+      if (num(x.amount) !== null && !coverOnly && num(x.current) !== null) add(T.amt, money(x.amount));
+      if (x.type === 'Insurance' && num(x.amount) && !coverOnly) add('Sum assured', money(x.amount));
+      if (T.inst && num(x.installment)) add(T.inst, money(x.installment) + (x.frequency ? ' ' + x.frequency.toLowerCase() : ''));
+      if (x.nextDue && x.status !== 'closed') add('Next due', dmy(x.nextDue));
+      if (num(x.rate)) add('Interest rate', x.rate + '%');
+      if (x.start) add('Start date', dmy(x.start));
+      if (x.end) add(T.end || 'End date', dmy(x.end));
+      add('Notes', x.notes);
+    } else if (kind === 'entry') {
+      d.title = x.description || x.party || x.category; d.sub = (x.type === 'income' ? 'Income' : 'Expense') + (x.category ? ' \u00b7 ' + x.category : '');
+      d.amount = num(x.amount); d.amtLabel = x.type === 'income' ? 'Received' : 'Paid'; d.tone = x.type === 'income' ? 'in' : 'out';
+      add('Date', dmy(x.date) + (x.time ? ' ' + x.time : '')); add(x.type === 'income' ? 'From' : 'To', x.party && x.party !== d.title ? x.party : '');
+      add('Mode', x.mode); add('Bank / account', [x.bank, x.account].filter(Boolean).join(' ')); add('Reference no.', x.ref); add('Note', x.note);
+    } else if (kind === 'note') {
+      d.title = x.title || 'Note'; d.sub = x.label || ''; d.amount = num(x.amount); d.amtLabel = 'Amount';
+      add('Date', dmy(x.date) + (x.time ? ' ' + x.time : '')); add('Details', x.details); if (x.remind) add('Remind on', dmy(x.remind));
+    } else if (kind === 'account') {
+      var demat = x.group === 'demat';
+      d.title = x.name || x.institution; d.sub = (x.accType || (demat ? 'Demat' : 'Bank account')) + (x.name ? ' \u00b7 ' + x.institution : '');
+      add('Account holder', x.holder);
+      if (demat) { add('Broker / DP', x.name ? '' : x.institution); add('DP ID', x.dpId); add('Client ID', x.clientId); add('BO ID / demat no.', x.number); }
+      else { add('Bank', x.name ? '' : x.institution); add('Account number', x.number); add('IFSC', x.ifsc); add('Branch', x.branch); }
+    }
+    return d;
+  }
+  function shareText(d) {
+    var t = ['*' + d.title + '*'];
+    if (d.sub) t.push(d.sub);
+    if (d.amount !== null && d.amount !== undefined) t.push(d.amtLabel + ': ' + money(d.amount));
+    d.rows.forEach(function (r) { t.push(r[0] + ': ' + r[1]); });
+    return t.join('\n');
+  }
+  function wrapLines(ctx, text, width) {
+    var out = [];
+    String(text).split('\n').forEach(function (para) {
+      var line = '';
+      para.split(/\s+/).forEach(function (w) {
+        var tryL = line ? line + ' ' + w : w;
+        if (ctx.measureText(tryL).width <= width || !line) line = tryL; else { out.push(line); line = w; }
+        while (ctx.measureText(line).width > width && line.length > 1) {   // a very long number or word
+          var k = line.length; while (k > 1 && ctx.measureText(line.slice(0, k)).width > width) k--;
+          out.push(line.slice(0, k)); line = line.slice(k);
+        }
+      });
+      out.push(line);
+    });
+    return out;
+  }
+  function drawShare(d) {
+    var W = 1080, P = 64, inner = W - 2 * P, c = document.createElement('canvas'), x = c.getContext('2d');
+    var SANS = '-apple-system, "Segoe UI", Roboto, sans-serif', SERIF = 'Georgia, "Times New Roman", serif';
+    var col = { paper: '#f5efe3', page: '#fffaf0', ink: '#2a2620', ink2: '#6d6558', rule: '#e6dccb', in: '#2e7550', out: '#b0412e', accent: '#8c3b2b' };
+    function layout(draw) {
+      var y = P + 40;
+      x.font = 'bold 54px ' + SERIF; var tl = wrapLines(x, d.title || '', inner - 40);
+      tl.forEach(function (l) { if (draw) { x.fillStyle = col.ink; x.fillText(l, P + 20, y + 52); } y += 66; });
+      if (d.sub) { x.font = '30px ' + SANS; if (draw) { x.fillStyle = col.ink2; x.fillText(d.sub, P + 20, y + 30); } y += 48; }
+      if (d.amount !== null && d.amount !== undefined) {
+        y += 18; x.font = '26px ' + SANS; if (draw) { x.fillStyle = col.ink2; x.fillText(d.amtLabel.toUpperCase(), P + 20, y + 26); } y += 40;
+        x.font = 'bold 76px ' + SERIF; if (draw) { x.fillStyle = col[d.tone] || col.ink; x.fillText(money(d.amount), P + 20, y + 70); } y += 92;
+      }
+      if (d.rows.length) {
+        y += 14; if (draw) { x.fillStyle = col.rule; x.fillRect(P + 20, y, inner - 40, 2); } y += 26;
+        d.rows.forEach(function (r) {
+          x.font = '26px ' + SANS; if (draw) { x.fillStyle = col.ink2; x.fillText(r[0], P + 20, y + 26); } y += 38;
+          x.font = '34px ' + SANS; wrapLines(x, r[1], inner - 40).forEach(function (l) { if (draw) { x.fillStyle = col.ink; x.fillText(l, P + 20, y + 34); } y += 46; });
+          y += 18;
+        });
+      }
+      y += 24; x.font = '24px ' + SANS;
+      if (draw) { x.fillStyle = col.ink2; x.fillText('Expense Diary \u00b7 ' + dmy(today()), P + 20, y + 24); }
+      return y + 24 + 40 + P;
+    }
+    c.width = W; c.height = 400; var H = layout(false);
+    c.width = W; c.height = H;
+    x.fillStyle = col.paper; x.fillRect(0, 0, W, H);
+    x.save(); x.beginPath();
+    if (x.roundRect) x.roundRect(P - 16, P - 16, inner + 32, H - 2 * P + 32, 36); else x.rect(P - 16, P - 16, inner + 32, H - 2 * P + 32);
+    x.clip(); x.fillStyle = col.page; x.fillRect(P - 16, P - 16, inner + 32, H - 2 * P + 32);
+    x.fillStyle = col.accent; x.fillRect(P - 16, P - 16, 12, H - 2 * P + 32); x.restore();
+    layout(true);
+    return c;
+  }
+  var shareState = {};
+  function openShare(kind, item) {
+    closeModal();
+    var d = shareData(kind, item), c = drawShare(d);
+    shareState = { text: shareText(d), title: d.title, blob: null, file: null };
+    $('shareImg').src = c.toDataURL('image/png');
+    var name = String(d.title || 'item').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'item';
+    $('shImg').classList.add('hidden'); $('shCopyImg').classList.add('hidden');
+    var canCopyImg = !!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write);
+    c.toBlob(function (b) {
+      shareState.blob = b;
+      try { shareState.file = new File([b], name + '.png', { type: 'image/png' }); } catch (e) {}
+      var canShare = false;
+      try { canShare = !!(shareState.file && navigator.canShare && navigator.canShare({ files: [shareState.file] })); } catch (e) {}
+      $('shImg').classList.toggle('hidden', !canShare);
+      $('shCopyImg').classList.toggle('hidden', !canCopyImg);
+      $('shHint').textContent = canShare || canCopyImg ? (kind === 'account' ? 'Customer ID, mobile, e-mail, nominee and balance are left out.' : '')
+        : 'To send it as a picture, take a screenshot of the card above.' + (kind === 'account' ? ' Customer ID, mobile, e-mail, nominee and balance are left out.' : '');
+    }, 'image/png');
+    $('shHint').textContent = '';
+    openModal('shareSheet');
+  }
+  document.querySelectorAll('[data-share]').forEach(function (b) {
+    b.onclick = function () {
+      var k = b.dataset.share, it = k === 'holding' ? ui.hold : k === 'note' ? ui.note : k === 'account' ? ui.acct : ui.editing;
+      if (!it) return;
+      openShare(k, it);
+    };
+  });
+  $('shImg').onclick = function () {
+    if (!shareState.file) return;
+    navigator.share({ files: [shareState.file], title: shareState.title }).catch(function () {});
+  };
+  $('shCopyImg').onclick = function () {
+    if (!shareState.blob) return;
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': shareState.blob })])
+      .then(function () { toast('Image copied. Paste it into any chat.'); }, function () { toast('Could not copy the image here. Use Copy text, or take a screenshot.'); });
+  };
+  $('shCopyTxt').onclick = function () { copyText(shareState.text, 'Details'); };
+
   /* ---------- assets and liabilities ---------- */
   function holdValue(h) { var c = num(h.current); return c !== null ? c : (typeOf(h).fb ? (num(h.amount) || 0) : 0); }
   function holdCard(h) {
@@ -1200,7 +1388,7 @@ nav.tabs button.on { color: var(--accent); }
     $('aBal').value = num(x.balance) !== null ? x.balance : '';
     $('aInNet').checked = x.inNetWorth !== 'no';
     $('aClosed').checked = x.status === 'closed';
-    $('aDelete').classList.toggle('hidden', !a);
+    $('aDelete').classList.toggle('hidden', !a); $('aShare').classList.toggle('hidden', !a);
     openModal('acctSheet');
   }
   function copyText(text, what) {
@@ -1265,7 +1453,7 @@ nav.tabs button.on { color: var(--accent); }
   function render() {
     $('modeNote').classList.toggle('hidden', remote());
     $('uploadLocal').classList.toggle('hidden', !(remote() && hasLocalData()));
-    var needsUpdate = remote() && (D.notesOk === false || D.accountsOk === false);
+    var needsUpdate = remote() && (D.notesOk === false || D.accountsOk === false || D.remindOk === false);
     $('updateCard').classList.toggle('hidden', !needsUpdate);
     if (needsUpdate && window.__prefetchCode) window.__prefetchCode();
     var hasSheet = remote() && !!D.sheetId;
@@ -1333,6 +1521,7 @@ nav.tabs button.on { color: var(--accent); }
     $('eSave').textContent = mode === 'inbox' ? 'Add to diary' : 'Save';
     $('eDanger').textContent = mode === 'inbox' ? 'Ignore this transaction' : 'Delete entry';
     $('eDanger').classList.toggle('hidden', mode === 'new');
+    $('eShare').classList.toggle('hidden', mode !== 'entry');
     openModal('entrySheet');
     if (mode === 'new') setTimeout(function () { $('fAmount').focus(); }, 280);
   }
@@ -1383,7 +1572,9 @@ nav.tabs button.on { color: var(--accent); }
     $('hDue').value = x.nextDue || ''; $('hRate').value = num(x.rate) !== null ? x.rate : '';
     $('hStart').value = x.start || ''; $('hEnd').value = x.end || ''; $('hNotes').value = x.notes || '';
     $('hClosed').checked = x.status === 'closed';
-    $('hDelete').classList.toggle('hidden', !h);
+    $('hAlert').checked = x.alert !== 'off';
+    $('hDelete').classList.toggle('hidden', !h); $('hShare').classList.toggle('hidden', !h);
+    remindHint();
     applyTypeLabels();
     setupPayBox(h);
     openModal('holdSheet');
@@ -1416,6 +1607,7 @@ nav.tabs button.on { color: var(--accent); }
       installment: T.inst ? $('hInst').value : '', frequency: T.inst ? $('hFreq').value : '', nextDue: T.inst ? $('hDue').value : '',
       start: $('hStart').value, end: $('hEnd').value, notes: $('hNotes').value.trim(), status: $('hClosed').checked ? 'closed' : 'active'
     };
+    if (alertOk()) o.alert = $('hAlert').checked ? '' : 'off';
     ['amount', 'current', 'rate', 'installment'].forEach(function (k) { o[k] = o[k] === '' ? '' : Number(o[k]); });
     return o;
   }
@@ -1555,6 +1747,7 @@ nav.tabs button.on { color: var(--accent); }
       date: $('nDate').value, time: $('nTime').value, title: $('nTitle').value.trim(), details: $('nDetails').value.trim(),
       label: $('nLabel').value, amount: $('nAmount').value === '' ? '' : Math.round(parseFloat($('nAmount').value) * 100) / 100, remind: $('nRemind').value
     };
+    if (alertOk()) n.alert = $('nAlert').checked ? '' : 'off';
     if (!n.date) { toast('Please choose a date.'); return; }
     if (!n.title && !n.details) { toast('Please write a title or some details.'); $('nTitle').focus(); return; }
     var ops = [{ action: 'save', kind: 'note', item: ui.note ? Object.assign({ id: ui.note.id }, n) : n }];
@@ -1585,7 +1778,7 @@ nav.tabs button.on { color: var(--accent); }
     var btn = this;
     busy(btn, call('refresh', {})).then(function (j) {
       apply(j);
-      toast(j.notes && j.accounts ? 'Your service is up to date.' : 'Not updated yet. Please check steps 3 and 4.');
+      toast((j.features || []).indexOf('reminders') >= 0 ? 'Your service is up to date. Due-date reminders will come to your Gmail.' : 'Not updated yet. Please check steps 3 and 4.');
     }).catch(function () {});
   };
   $('aGroup').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b) setAcctGroup(b.dataset.g); });

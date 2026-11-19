@@ -30,16 +30,16 @@ function load(codePath, opts = {}) {
   const props = Object.assign({}, opts.props || {});
   const sheets = {};
   (opts.presetSheets || []).forEach(([name, rows]) => { const s = makeSheet(name); rows.forEach(r => s.rows.push(r)); sheets[name] = s; });
-  const gmail = { threads: [] };
+  const gmail = { threads: [] }, sent = [];
   const ctx = {
     console, Date, JSON, Math,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet(n)), getUrl: () => 'https://docs.google.com/spreadsheets/d/x/edit', getId: () => 'x' }) },
     HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/ABC/exec' }), getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
-    GmailApp: { getUserLabelByName: () => ({}), createLabel: () => ({}), search: () => gmail.threads.splice(0) },
-    Utilities: { getUuid: () => crypto.randomUUID(), formatDate: d => d.toISOString().slice(0, 10) },
-    Session: { getScriptTimeZone: () => 'Asia/Kolkata' },
+    GmailApp: { getUserLabelByName: () => ({}), createLabel: () => ({}), search: () => gmail.threads.splice(0), sendEmail: (to, subject, body, o) => sent.push({ to, subject, body, html: o && o.htmlBody }) },
+    Utilities: { getUuid: () => crypto.randomUUID(), formatDate: (d, tz, f) => { const ist = new Date(d.getTime() + 330 * 60000); return f === 'H' ? String(ist.getUTCHours()) : ist.toISOString().slice(0, 10); } },
+    Session: { getScriptTimeZone: () => 'Asia/Kolkata', getEffectiveUser: () => ({ getEmail: () => 'owner@example.com' }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, tryLock: () => true, releaseLock() {} }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ setMimeType() { return s; } }) },
     Logger: { log: m => opts.log && console.log('   [log]', m) }
@@ -47,6 +47,6 @@ function load(codePath, opts = {}) {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(codePath, 'utf8'), ctx);
   const post = body => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }));
-  return { ctx, props, sheets, gmail, post };
+  return { ctx, props, sheets, gmail, post, sent };
 }
 module.exports = { load };
