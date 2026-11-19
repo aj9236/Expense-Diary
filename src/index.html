@@ -794,7 +794,24 @@ nav.tabs button.on { color: var(--accent); }
   function sortDesc(a, b) { return (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')); }
 
   /* ---------- confirm page ---------- */
+  /* Remember the category last chosen for each shop or payee. */
+  function payeeKey(x) {
+    var s = String(x.party || '').trim();
+    if (!s) s = String(x.description || '').replace(/^(?:UPI|NEFT|IMPS|RTGS|Card|Cash|ATM)?\s*(?:to|from|at)\s+/i, '');
+    s = s.toLowerCase().replace(/[^a-z0-9@]+/g, ' ').trim();
+    return s.length >= 3 ? (x.type === 'income' ? 'i|' : 'e|') + s : '';
+  }
+  function buildLearned() {
+    var m = {};
+    D.entries.slice().sort(function (a, b) {
+      return String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')) || sortDesc(a, b);
+    }).forEach(function (e) { var k = payeeKey(e); if (k && e.category && !m[k]) m[k] = e.category; });
+    return m;
+  }
+  function learnedFor(x) { var k = payeeKey(x); return (k && ui.learned && ui.learned[k]) || ''; }
+
   function renderConfirm() {
+    ui.learned = buildLearned();
     var list = D.inbox.slice().sort(sortDesc), ids = {};
     list.forEach(function (x) { ids[x.id] = 1; });
     Object.keys(ui.sel).forEach(function (k) { if (!ids[k]) delete ui.sel[k]; });
@@ -811,7 +828,9 @@ nav.tabs button.on { color: var(--accent); }
       '<button class="btn" id="ignSel"' + (n ? '' : ' disabled') + '>Ignore</button>' +
       '<button class="btn primary" id="addSel"' + (n ? '' : ' disabled') + '>Add' + (n ? ' ' + n : '') + ' to diary</button></div>';
     html += list.map(function (x) {
-      var on = !!ui.sel[x.id], inc = x.type === 'income', cat = (ui.edits[x.id] && ui.edits[x.id].category) || x.category;
+      var on = !!ui.sel[x.id], inc = x.type === 'income', lc = learnedFor(x);
+      var cat = (ui.edits[x.id] && ui.edits[x.id].category) || lc || x.category;
+      var remembered = lc && !(ui.edits[x.id] && ui.edits[x.id].category) && lc !== x.category;
       var meta = [x.bank ? x.bank + (x.account ? ' ' + x.account : '') : '', num(x.balance) !== null ? 'Bal ' + money(x.balance) : ''].filter(Boolean).join(' · ');
       return '<div class="ib' + (on ? ' on' : '') + '">' +
         '<label class="ck"><input type="checkbox" data-sel="' + esc(x.id) + '"' + (on ? ' checked' : '') + ' aria-label="Tick to add"></label>' +
@@ -820,7 +839,7 @@ nav.tabs button.on { color: var(--accent); }
           '<span class="big ' + (inc ? 'in' : 'out') + '">' + (inc ? '+' : '−') + money(x.amount) + '</span></span>' +
           '<span class="when">' + dmy(x.date) + (x.time ? ' · ' + esc(x.time) : '') + '</span></div>' +
           '<div class="desc">' + esc(x.description || x.party || 'Transaction') + '</div>' +
-          '<div class="meta"><span class="tag">' + (x.source === 'email' ? 'E-mail' : 'SMS') + '</span>' + esc(meta) + '</div>' +
+          '<div class="meta"><span class="tag">' + (x.source === 'email' ? 'E-mail' : 'SMS') + '</span>' + (remembered ? '<span class="tag">Your category</span>' : '') + esc(meta) + '</div>' +
         '</button>' +
         '<div class="catsel"><select data-cat="' + esc(x.id) + '" aria-label="Category">' + catOptions(x.type, cat) + '</select>' +
         '<button data-open="' + esc(x.id) + '">Edit</button></div></div>';
@@ -1238,7 +1257,11 @@ nav.tabs button.on { color: var(--accent); }
   function openEntry(e, mode) {
     ui.editing = e; ui.editMode = mode;
     var x = e || { type: 'expense', date: defaultNewDate(), mode: 'Cash', category: 'Others' };
-    if (mode === 'inbox' && ui.edits[x.id]) x = Object.assign({}, x, ui.edits[x.id]);
+    if (mode === 'inbox') {
+      var lcat = learnedFor(x);
+      if (lcat) x = Object.assign({}, x, { category: lcat });
+      if (ui.edits[x.id]) x = Object.assign({}, x, ui.edits[x.id]);
+    }
     setType(x.type, x.category);
     $('eTitle').textContent = mode === 'new' ? 'New income or expense' : mode === 'inbox' ? 'Check before adding' : 'Edit entry';
     $('fAmount').value = x.amount || '';
@@ -1398,7 +1421,10 @@ nav.tabs button.on { color: var(--accent); }
     if ((x = t.closest('.entry'))) { var e = D.entries.find(function (i) { return i.id === x.dataset.id; }); if (e) openEntry(e, 'entry'); return; }
     if ((x = t.closest('[data-hid]'))) { var h = D.holdings.find(function (i) { return i.id === x.dataset.hid; }); if (h) openHolding(h, !!x.dataset.pay); return; }
     if (t.id === 'addSel') {
-      var items = Object.keys(ui.sel).map(function (id) { return { id: id, entry: ui.edits[id] || {} }; });
+      var items = Object.keys(ui.sel).map(function (id) {
+        var it = D.inbox.find(function (i) { return i.id === id; }), lc = it ? learnedFor(it) : '';
+        return { id: id, entry: Object.assign(lc ? { category: lc } : {}, ui.edits[id] || {}) };
+      });
       busy(t, act('confirm', { items: items })).then(function () {
         items.forEach(function (i) { delete ui.edits[i.id]; }); ui.sel = {}; render();
         toast(items.length + ' added to your diary');
