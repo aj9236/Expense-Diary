@@ -898,6 +898,62 @@ var ExpenseParser = (function () {
     return j;
   }
   function act(action, body) { return call(action, body).then(apply); }
+
+  /* ---------- instant saving ----------
+     The change is shown at once; the Google Sheet is updated in the background, one request at a time.
+     If the Sheet refuses or cannot be reached, the app says so and reloads the true state. */
+  var saveQueue = Promise.resolve(), pendingSaves = 0;
+  function newId() { try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {} return uid() + Math.random().toString(36).slice(2); }
+  var KIND_LIST = { entry: 'entries', holding: 'holdings', note: 'notes', account: 'accounts' };
+  var ENTRY_COPY = ['date','time','type','amount','category','description','party','account','bank','mode','ref','balance','source','raw'];
+  function mutateLocal(action, body) {
+    var now = new Date().toISOString();
+    if (action === 'batch') { (body.ops || []).forEach(function (op) { mutateLocal(op.action, op); }); return; }
+    if (action === 'save') {
+      var k = KIND_LIST[body.kind]; if (!k) return;
+      if (!D[k]) D[k] = [];
+      var it = {};
+      Object.keys(body.item).forEach(function (f) {
+        var v = body.item[f];
+        if (typeof v === 'string' && /^(amount|current|installment|balance|premium|sumAssured|rate|value)$/.test(f) && /^[\d,.\s]+$/.test(v) && v.trim()) v = Number(v.replace(/[,\s]/g, ''));
+        it[f] = v;
+      });
+      var i = D[k].findIndex(function (x) { return x.id === it.id; });
+      if (i >= 0) D[k][i] = Object.assign({}, D[k][i], it, { updated: now });
+      else D[k].push(Object.assign({ created: now, updated: now }, body.kind === 'entry' ? { source: 'manual', status: 'confirmed' } : { status: 'active' }, it));
+    } else if (action === 'delete') {
+      var k2 = KIND_LIST[body.kind]; if (k2 && D[k2]) D[k2] = D[k2].filter(function (x) { return x.id !== body.id; });
+    } else if (action === 'ignore') {
+      D.inbox = D.inbox.filter(function (x) { return (body.ids || []).indexOf(x.id) < 0; });
+    } else if (action === 'confirm') {
+      (body.items || []).forEach(function (c) {
+        var m = D.inbox.find(function (x) { return x.id === c.id; }); if (!m) return;
+        var e = { id: 'pending-' + newId(), status: 'confirmed', created: now, updated: now, _pending: true };
+        ENTRY_COPY.forEach(function (f) { if (m[f] !== undefined) e[f] = m[f]; });
+        Object.keys(c.entry || {}).forEach(function (f) { if (f !== 'raw' && f !== 'source') e[f] = c.entry[f]; });
+        D.entries.push(e);
+        D.inbox = D.inbox.filter(function (x) { return x.id !== c.id; });
+      });
+    }
+  }
+  function fast(action, body) {
+    if (!remote()) return act(action, body);
+    // New records get their final id now, so they can be opened and edited straight away.
+    if (action === 'save' && body.item && !body.item.id) body.item.id = newId();
+    if (action === 'batch') (body.ops || []).forEach(function (op) { if (op.action === 'save' && op.item && !op.item.id) op.item.id = newId(); });
+    mutateLocal(action, body);
+    store('ed2.remote', D);
+    pendingSaves++; render(); setSync('Saving…');
+    saveQueue = saveQueue.then(function () { return call(action, body); }).then(function (j) {
+      pendingSaves--;
+      if (!pendingSaves) { apply(j); } else setSync('Saving…');
+    }, function (err) {
+      pendingSaves--;
+      toast('Could not save to your Google Sheet: ' + (err && err.message || 'no connection') + '. Showing your saved records again.');
+      if (!pendingSaves) call('refresh', {}).then(apply).catch(function () { setSync('Offline'); });
+    });
+    return Promise.resolve();
+  }
   function busy(btn, p) {
     if (btn) btn.disabled = true;
     return p.catch(function (e) { toast(e.message || String(e)); throw e; }).finally(function () { if (btn) btn.disabled = false; });
@@ -981,7 +1037,7 @@ var ExpenseParser = (function () {
     lastRefresh = Date.now();
     ui.refreshing = true; setSync(syncLabel());
     call('refresh', { scan: true, force: !!force }).then(function (j) {
-      ui.refreshing = false; apply(j); flushAndroid(); afterConnect();
+      ui.refreshing = false; if (!pendingSaves) apply(j); flushAndroid(); afterConnect();
       if (!ui.navigated && D.inbox.length && ui.tab !== 'confirm') go('confirm', true);
       if (loud) toast(D.inbox.length ? D.inbox.length + ' transaction' + (D.inbox.length > 1 ? 's' : '') + ' to confirm' : 'No new transactions');
     }).catch(function (e) {
@@ -1013,6 +1069,7 @@ var ExpenseParser = (function () {
   function syncLabel() {
     if (!remote()) return 'In this browser';
     if (ui.refreshing) return 'Checking…';
+    if (typeof pendingSaves !== 'undefined' && pendingSaves) return 'Saving…';
     if (!ui.lastSync) return 'Not synced';
     var d = new Date(ui.lastSync);
     return 'Updated ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -1653,14 +1710,18 @@ var ExpenseParser = (function () {
       document.querySelectorAll('#viewSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === 'month'); });
       render(); window.scrollTo(0, 0); return;
     }
-    if ((x = t.closest('.entry'))) { var e = D.entries.find(function (i) { return i.id === x.dataset.id; }); if (e) openEntry(e, 'entry'); return; }
+    if ((x = t.closest('.entry'))) {
+      var e = D.entries.find(function (i) { return i.id === x.dataset.id; });
+      if (e && e._pending) { toast('Still saving this one. Please try again in a moment.'); return; }
+      if (e) openEntry(e, 'entry'); return;
+    }
     if ((x = t.closest('[data-hid]'))) { var h = D.holdings.find(function (i) { return i.id === x.dataset.hid; }); if (h) openHolding(h, !!x.dataset.pay); return; }
     if (t.id === 'addSel') {
       var items = Object.keys(ui.sel).map(function (id) {
         var it = D.inbox.find(function (i) { return i.id === id; }), lc = it ? learnedFor(it) : '';
         return { id: id, entry: Object.assign(lc ? { category: lc } : {}, ui.edits[id] || {}) };
       });
-      busy(t, act('confirm', { items: items })).then(function () {
+      busy(t, fast('confirm', { items: items })).then(function () {
         items.forEach(function (i) { delete ui.edits[i.id]; }); ui.sel = {}; render();
         toast(items.length + ' added to your diary');
       }).catch(function () {});
@@ -1669,7 +1730,7 @@ var ExpenseParser = (function () {
     if (t.id === 'ignSel') {
       var ids = Object.keys(ui.sel);
       if (!confirm('Ignore ' + ids.length + ' transaction' + (ids.length > 1 ? 's' : '') + '? ' + (ids.length > 1 ? 'They' : 'It') + ' will not be added to the diary.')) return;
-      busy(t, act('ignore', { ids: ids })).then(function () { ui.sel = {}; render(); toast('Ignored'); }).catch(function () {});
+      busy(t, fast('ignore', { ids: ids })).then(function () { ui.sel = {}; render(); toast('Ignored'); }).catch(function () {});
       return;
     }
     if (t.id === 'toggleClosed') { ui.showClosed = !ui.showClosed; renderAssets(); return; }
@@ -1735,7 +1796,7 @@ var ExpenseParser = (function () {
     var addExp = !ui.note && $('nExpense').checked && Number(n.amount) > 0;
     if (addExp) ops.push({ action: 'save', kind: 'entry', item: { type: 'expense', amount: n.amount, date: n.date, time: n.time,
       category: LABEL_CAT[n.label] || 'Others', description: n.title || n.details.slice(0, 60), mode: '' } });
-    busy(this, act('batch', { ops: ops })).then(function () {
+    busy(this, fast('batch', { ops: ops })).then(function () {
       closeModal(); toast(addExp ? 'Note saved and added to expenses' : 'Note saved');
       if (!ui.note && ui.view === 'month') { var d = n.date.split('-'); ui.y = +d[0]; ui.m = +d[1] - 1; render(); }
     }).catch(function () {});
@@ -1777,15 +1838,15 @@ var ExpenseParser = (function () {
     };
     if (!a.institution && !a.name) { toast('Please enter the bank or broker name.'); $('aInst').focus(); return; }
     if (ui.acct) a.id = ui.acct.id;
-    busy(this, act('save', { kind: 'account', item: a })).then(function () { closeModal(); toast('Saved'); }).catch(function () {});
+    busy(this, fast('save', { kind: 'account', item: a })).then(function () { closeModal(); toast('Saved'); }).catch(function () {});
   };
   $('aDelete').onclick = function () {
     if (!ui.acct || !confirm('Delete this account record? This cannot be undone.')) return;
-    busy(this, act('delete', { kind: 'account', id: ui.acct.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
+    busy(this, fast('delete', { kind: 'account', id: ui.acct.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
   };
   $('nDelete').onclick = function () {
     if (!ui.note || !confirm('Delete this note? This cannot be undone.')) return;
-    busy(this, act('delete', { kind: 'note', id: ui.note.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
+    busy(this, fast('delete', { kind: 'note', id: ui.note.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
   };
   $('modalBg').onclick = closeModal;
   document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = closeModal; });
@@ -1796,8 +1857,8 @@ var ExpenseParser = (function () {
     var e = collectEntry(), mode = ui.editMode, base = ui.editing, p;
     if (!(e.amount > 0)) { toast('Please enter an amount.'); return; }
     if (!e.date) { toast('Please choose a date.'); return; }
-    if (mode === 'inbox') p = act('confirm', { items: [{ id: base.id, entry: e }] });
-    else p = act('save', { kind: 'entry', item: mode === 'entry' ? Object.assign({ id: base.id }, e) : e });
+    if (mode === 'inbox') p = fast('confirm', { items: [{ id: base.id, entry: e }] });
+    else p = fast('save', { kind: 'entry', item: mode === 'entry' ? Object.assign({ id: base.id }, e) : e });
     busy(this, p).then(function () {
       if (mode === 'inbox') { delete ui.sel[base.id]; delete ui.edits[base.id]; }
       closeModal(); render();
@@ -1807,8 +1868,8 @@ var ExpenseParser = (function () {
   };
   $('eDanger').onclick = function () {
     var base = ui.editing, mode = ui.editMode, p;
-    if (mode === 'inbox') { p = act('ignore', { ids: [base.id] }); }
-    else { if (!confirm('Delete this entry? This cannot be undone.')) return; p = act('delete', { kind: 'entry', id: base.id }); }
+    if (mode === 'inbox') { p = fast('ignore', { ids: [base.id] }); }
+    else { if (!confirm('Delete this entry? This cannot be undone.')) return; p = fast('delete', { kind: 'entry', id: base.id }); }
     busy(this, p).then(function () { delete ui.sel[base.id]; closeModal(); render(); toast(mode === 'inbox' ? 'Ignored' : 'Deleted'); }).catch(function () {});
   };
 
@@ -1817,11 +1878,11 @@ var ExpenseParser = (function () {
     var o = collectHolding();
     if (!o.name) { toast('Please give the item a name.'); $('hName').focus(); return; }
     if (ui.hold) o.id = ui.hold.id;
-    busy(this, act('save', { kind: 'holding', item: o })).then(function () { closeModal(); toast('Saved'); }).catch(function () {});
+    busy(this, fast('save', { kind: 'holding', item: o })).then(function () { closeModal(); toast('Saved'); }).catch(function () {});
   };
   $('hDelete').onclick = function () {
     if (!ui.hold || !confirm('Delete "' + ui.hold.name + '"? This cannot be undone.')) return;
-    busy(this, act('delete', { kind: 'holding', id: ui.hold.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
+    busy(this, fast('delete', { kind: 'holding', id: ui.hold.id })).then(function () { closeModal(); toast('Deleted'); }).catch(function () {});
   };
   $('payBtn').onclick = function () {
     var h = ui.hold, T = typeOf(h), amt = Math.round(parseFloat($('payAmt').value) * 100) / 100, date = $('payDate').value;
@@ -1838,7 +1899,7 @@ var ExpenseParser = (function () {
         description: (T.pay.income ? 'Received – ' : (T.inst || 'Payment') + ' – ') + h.name,
         party: h.party || '', mode: '', ref: h.ref || '' } });
     }
-    busy(this, act('batch', { ops: ops })).then(function () {
+    busy(this, fast('batch', { ops: ops })).then(function () {
       closeModal();
       toast((T.pay.income ? 'Receipt' : 'Payment') + ' of ' + money(amt) + ' recorded' + (upd.nextDue && upd.nextDue !== h.nextDue ? '; next due ' + dmy(upd.nextDue) : ''));
     }).catch(function () {});
