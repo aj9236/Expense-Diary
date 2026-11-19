@@ -15,12 +15,19 @@
 var SPREADSHEET_ID = '';
 
 function ss_() {
-  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
+  var props = PropertiesService.getScriptProperties();
+  if (SPREADSHEET_ID) {
+    // Remember it, so pasting a newer version of this code (where the line above is blank) keeps using the same Sheet.
+    if (props.getProperty('SHEET_ID') !== SPREADSHEET_ID) props.setProperty('SHEET_ID', SPREADSHEET_ID);
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
   var active = SpreadsheetApp.getActiveSpreadsheet();
   if (active) return active;
   // A copied standalone service keeps its own Sheet, created on first setup.
-  var props = PropertiesService.getScriptProperties(), id = props.getProperty('SHEET_ID');
-  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) { } }
+  var id = props.getProperty('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  // Never start an empty Sheet for a service that is already in use.
+  if (props.getProperty('TOKEN')) throw new Error('Your Google Sheet was not found. In Apps Script, open Project Settings, Script properties, and set SHEET_ID to your Sheet\'s ID.');
   var created = SpreadsheetApp.create('Expense Diary');
   props.setProperty('SHEET_ID', created.getId());
   return created;
