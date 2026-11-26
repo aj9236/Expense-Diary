@@ -966,7 +966,7 @@ var ExpenseParser = (function () {
     mutateLocal(action, body);
     store('ed2.remote', D);
     pendingSaves++; render(); setSync('Saving…');
-    saveQueue = saveQueue.then(function () { return call(action, body); }).then(function (j) {
+    saveQueue = saveQueue.then(function () { return call(action, realIds(action, body)); }).then(function (j) {
       pendingSaves--;
       if (!pendingSaves) { apply(j); } else setSync('Saving…');
     }, function (err) {
@@ -975,6 +975,54 @@ var ExpenseParser = (function () {
       if (!pendingSaves) call('refresh', {}).then(apply).catch(function () { setSync('Offline'); });
     });
     return Promise.resolve();
+  }
+  // A pasted SMS gets a temporary id until the Sheet replies; later actions are sent with the real one.
+  var idMap = {};
+  function realIds(action, body) {
+    var r = function (id) { return idMap[id] || id; };
+    if (action === 'confirm') return Object.assign({}, body, { items: (body.items || []).map(function (c) { return Object.assign({}, c, { id: r(c.id) }); }) });
+    if (action === 'ignore') return Object.assign({}, body, { ids: (body.ids || []).map(r) });
+    return body;
+  }
+  function seenBefore(p) {
+    var lists = [D.inbox || [], D.entries || []];
+    for (var l = 0; l < 2; l++) for (var i = 0; i < lists[l].length; i++) {
+      var e = lists[l][i];
+      if (p.ref && e.ref && String(e.ref) === String(p.ref)) return true;
+      if (!p.ref && p.account && e.source !== 'manual' && e.type === p.type && Number(e.amount) === p.amount && e.date === p.date && String(e.account) === String(p.account)) return true;
+    }
+    return false;
+  }
+  // Shows a pasted or shared SMS on the Confirm page at once and saves it to the Sheet in the background.
+  function quickIngest(text, p) {
+    var label = (p.type === 'income' ? 'Credit ' : 'Debit ') + money(p.amount) + ' of ' + dmy(p.date);
+    if (!remote()) {
+      return call('ingest', { text: text, source: 'sms', snapshot: true }).then(function (j) {
+        apply(j); toast(j.duplicate ? 'This transaction is already recorded.' : label + ' is ready to confirm'); return !j.duplicate;
+      });
+    }
+    if (seenBefore(p)) { toast('This transaction is already recorded.'); return Promise.resolve(false); }
+    var now = new Date().toISOString(), tmp = 'pending-' + newId();
+    D.inbox.unshift({ id: tmp, date: p.date, time: p.time, type: p.type, amount: p.amount, category: p.category, description: p.description,
+      party: p.party, account: p.account, bank: p.bank, mode: p.mode, ref: p.ref, balance: p.balance === null ? '' : p.balance,
+      source: 'sms', status: 'new', raw: text.slice(0, 1500), received: now, updated: now });
+    store('ed2.remote', D);
+    pendingSaves++; render(); setSync('Saving…');
+    toast(label + ' is ready to confirm');
+    saveQueue = saveQueue.then(function () { return call('ingest', { text: text, source: 'sms', snapshot: true }); }).then(function (j) {
+      pendingSaves--;
+      if (j.item) idMap[tmp] = j.item.id;
+      D.inbox.forEach(function (x) { if (x.id === tmp && j.item) x.id = j.item.id; });
+      if (j.item && ui.sel && ui.sel[tmp]) { ui.sel[j.item.id] = ui.sel[tmp]; delete ui.sel[tmp]; }
+      if (j.duplicate) { D.inbox = D.inbox.filter(function (x) { return x.id !== tmp; }); toast('This transaction was already in your Sheet, so it was not added again.'); }
+      if (!pendingSaves) apply(j); else { store('ed2.remote', D); render(); setSync('Saving…'); }
+    }, function (err) {
+      pendingSaves--;
+      D.inbox = D.inbox.filter(function (x) { return x.id !== tmp; });
+      toast('Could not save the message to your Google Sheet: ' + (err && err.message || 'no connection') + '. Please paste it again.');
+      if (!pendingSaves) call('refresh', {}).then(apply).catch(function () { render(); setSync('Offline'); }); else render();
+    });
+    return Promise.resolve(true);
   }
   function busy(btn, p) {
     if (btn) btn.disabled = true;
@@ -1962,11 +2010,7 @@ var ExpenseParser = (function () {
     if (!text) { toast('Paste a bank message first.'); return; }
     var p = ExpenseParser.parse(text, new Date());
     if (!p) { toast('This does not look like a completed debit or credit.'); return; }
-    busy(btn, call('ingest', { text: text, source: 'sms', snapshot: true })).then(function (j) {
-      apply(j);
-      if (j.duplicate) toast('This transaction is already recorded.');
-      else { $('pasteBox').value = ''; toast((p.type === 'income' ? 'Credit ' : 'Debit ') + money(p.amount) + ' of ' + dmy(p.date) + ' is ready to confirm'); }
-    }).catch(function () {});
+    busy(btn, quickIngest(text, p)).then(function (added) { if (added) $('pasteBox').value = ''; }).catch(function () {});
   };
 
   $('addBtn').onclick = function () {
@@ -2176,10 +2220,7 @@ var ExpenseParser = (function () {
     ui.tab = 'confirm'; ui.navigated = true;
     var p = ExpenseParser.parse(text, new Date());
     if (!p) { setTimeout(function () { toast('That message is not a completed debit or credit.'); }, 300); return; }
-    call('ingest', { text: text, source: 'sms', snapshot: true }).then(function (j) {
-      apply(j);
-      toast(j.duplicate ? 'This transaction is already recorded.' : (p.type === 'income' ? 'Credit ' : 'Debit ') + money(p.amount) + ' of ' + dmy(p.date) + ' is ready to confirm');
-    }).catch(function (e) { toast(e.message); });
+    quickIngest(text, p).catch(function (e) { toast(e.message); });
   })();
   syncAndroidConfig();
   render();
